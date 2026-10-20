@@ -1,0 +1,30 @@
+### JetBrains IntelliJ IDEA (Среда разработки) ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/resources/
+!**/src/test/resources/
+
+### Gradle (Сборка) ###
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+### Если Maven ###
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/.maven/
+
+### Логи и системные файлы ###
+*.log
+.DS_Store
+Thumbs.db
