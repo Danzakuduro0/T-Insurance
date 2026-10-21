@@ -1,0 +1,72 @@
+ktor:
+  deployment:
+    port: "$PORT:8080"
+  application:
+    modules:
+      - ru.tinsurance.server.ApplicationKt.module
+
+# Режим: dev — локальная разработка, prod — всё остальное.
+# Если APP_MODE не задан: dev при режиме разработки Ktor (запуск из IntelliJ и ./gradlew :server:run), иначе prod.
+app:
+  mode: "$APP_MODE:"
+  # Часовой пояс для фильтров очереди «с даты по дату», если веб оператора не передал свой (?tz=)
+  timeZone: "$APP_TIME_ZONE:Europe/Moscow"
+
+# Значения по умолчанию совпадают с docker-compose.yml в корне проекта.
+# В другом окружении переопределяются переменными DB_URL / DB_USER / DB_PASSWORD.
+db:
+  url: "$DB_URL:jdbc:postgresql://localhost:5432/tstrah"
+  user: "$DB_USER:tstrah"
+  password: "$DB_PASSWORD:tstrah"
+  maxPoolSize: 10
+
+jwt:
+  # Обязателен в prod (не короче 32 символов). В dev, если не задан, генерируется случайный на время запуска.
+  secret: "$JWT_SECRET:"
+  issuer: "tstrah-backend"
+  accessTokenTtlMinutes: 15
+  mobileRefreshTtlDays: 60   # телефон: вход живёт долго
+  webRefreshTtlHours: 12     # веб оператора: примерно рабочий день
+
+# Откуда разрешено открывать веб оператора (dev-серверы React/Vite/Angular)
+cors:
+  allowedHosts:
+    - "localhost:3000"
+    - "localhost:5173"
+    - "localhost:4200"
+
+# Правила обращений. Обязательные поля и документы по типу события — в справочниках БД
+# (event_type_fields, required_documents), см. docs/OPEN_QUESTIONS.md
+claims:
+  # Вопрос 34: срок на дозагрузку материалов, дней
+  infoRequestDueDays: 7
+
+# Вымышленные тестовые данные (учётки описаны в demo/DemoData.kt).
+# По умолчанию: dev — создаются с dev-паролем, prod — нет. В prod DEMO_SEED=true требует DEMO_PASSWORD.
+demo:
+  seed: "$DEMO_SEED:"
+  password: "$DEMO_PASSWORD:"
+
+# Файлы обращений (шаг 2). Содержимое — на диске сервера; в БД только метаданные.
+storage:
+  # По умолчанию ~/.tstrah/files — не зависит от того, откуда запущен сервер
+  localDir: "$STORAGE_DIR:"
+
+files:
+  # Вопрос 14: лимиты задаёт команда. Размер одного файла — в справочнике document_types.
+  maxFilesPerClaim: 15
+  maxTotalBytesPerClaim: 104857600   # 100 МБ
+  maxImagePixels: 50000000           # защита от «бомб» в изображениях
+  maxUploadRequestBytes: 22020096    # 21 МБ: самый большой файл (20 МБ) + служебная часть multipart
+  maxConcurrentProcessing: 4         # сколько загрузок одновременно проверяются в памяти, остальные ждут
+  phashMaxDistance: 5                # фото из разных обращений с отличием хэша до 5 бит из 64 — один снимок
+
+security:
+  # Запросов к /auth/* в минуту с одного адреса
+  authRequestsPerMinute: 30
+  # Блокировка логина: столько неудачных попыток за окно → вход по нему закрыт на loginLockMinutes
+  maxFailedLogins: 5
+  failedLoginWindowMinutes: 15
+  loginLockMinutes: 5
+  # Максимальный размер JSON-запроса, байт
+  maxJsonBodyBytes: 262144

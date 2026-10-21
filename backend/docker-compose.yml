@@ -1,0 +1,49 @@
+# Локальное окружение.
+#   docker compose up -d                                  — только база (сервер запускаете из IntelliJ)
+#   ./gradlew :server:buildFatJar && docker compose --profile app up -d --build   — база + сервер в контейнере
+# Порты открыты только на этом компьютере (127.0.0.1), из локальной сети они недоступны.
+# Пароли и секреты можно задать в файле .env (см. .env.example); значения по умолчанию — только для разработки.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped   # поднимается сам после перезапуска Docker Desktop
+    environment:
+      POSTGRES_DB: tstrah
+      POSTGRES_USER: tstrah
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tstrah}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tstrah -d tstrah"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Сервер в контейнере — только с профилем app, чтобы не мешать запуску из IntelliJ на том же порту 8080
+  server:
+    profiles: ["app"]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/tstrah
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-tstrah}
+      # dev по умолчанию: демо-учётки и случайный JWT-секрет (после перезапуска — войти заново).
+      # Для показа: APP_MODE=prod и JWT_SECRET в .env
+      APP_MODE: ${APP_MODE:-dev}
+      JWT_SECRET: ${JWT_SECRET:-}
+      DEMO_SEED: ${DEMO_SEED:-}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-Europe/Moscow}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - files:/data/files
+
+volumes:
+  pgdata:
+  files:      # файлы обращений сервера из контейнера
