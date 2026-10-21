@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Server" type="JetRunConfigurationType" nameIsGenerated="false">
+    <option name="MAIN_CLASS_NAME" value="ru.tinsurance.server.ApplicationKt" />
+    <module name="t-insurance-backend.server.main" />
+    <option name="VM_PARAMETERS" value="-Dio.ktor.development=true" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
