@@ -48,6 +48,13 @@ Files: `POST /claims/{id}/files` (multipart: `documentType`, `file`, optional `c
 removed from photos, files are stored in `STORAGE_DIR` (default `~/.tstrah/files`). Login endpoints are rate-limited
 and a login is locked for 5 minutes after 5 failed attempts.
 
+Photo analysis (step 3) runs in the background right after upload: with `ML_URL` set the server calls the ML service
+(`POST {ML_URL}/analyze`, format — section 6.2 of the requirements, see [docs/ML_CONTRACT.md](./docs/ML_CONTRACT.md)),
+otherwise a local quality check (blur, brightness, resolution). An unusable photo is rejected with a hint while the client
+can still replace it. After submit the claim waits for the analysis (at most 15 min) and is routed to the queue
+(`STANDARD` or `MANUAL_REVIEW` by the confidence threshold 0.65); if the ML service is down it is retried 3 times
+(30/90/270 s) and the claim goes to manual review.
+
 Required fields and documents per event type live in reference tables (`event_type_fields`, `required_documents`).
 How each answer from the clarification document is implemented — [docs/OPEN_QUESTIONS.md](./docs/OPEN_QUESTIONS.md).
 Request/response models are shared with the app: [core/api](./core/src/commonMain/kotlin/ru/tinsurance/api).

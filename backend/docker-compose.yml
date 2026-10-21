@@ -39,10 +39,20 @@ services:
       DEMO_SEED: ${DEMO_SEED:-}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
       APP_TIME_ZONE: ${APP_TIME_ZONE:-Europe/Moscow}
+      # адрес ML-сервиса; пусто — локальная проверка качества фото. С сервисом ниже: ML_URL=http://ml:8000
+      ML_URL: ${ML_URL:-}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - files:/data/files
+
+  # ML Image Service (раздел 6 требований) — раскомментировать, когда будет образ от ML-инженера.
+  # Читает фото по storage_key из той же папки, что и сервер, только на чтение.
+  # ml:
+  #   profiles: ["app"]
+  #   image: tstrah-ml:latest
+  #   volumes:
+  #     - files:/data/files:ro
 
 volumes:
   pgdata:

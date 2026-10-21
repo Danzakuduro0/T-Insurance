@@ -24,6 +24,8 @@ object TestDatabase {
         "demo.seed" to "true",
         "app.mode" to "dev",
         "storage.localDir" to storageDir.toString(),
+        // фоновый воркер в тестах не крутится сам — тест вызывает runReady() там, где нужно
+        "jobs.enabled" to "false",
     )
 
     /** Конфиг тестов; overrides заменяют значения, without — убирает ключи. */

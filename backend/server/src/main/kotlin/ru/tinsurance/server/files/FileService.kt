@@ -6,6 +6,8 @@ import ru.tinsurance.server.claims.ActorType
 import ru.tinsurance.server.claims.ClaimQueries
 import ru.tinsurance.server.common.*
 import ru.tinsurance.server.db.*
+import ru.tinsurance.server.jobs.JobQueue
+import ru.tinsurance.server.jobs.JobType
 import io.ktor.http.*
 import io.ktor.server.config.*
 import kotlinx.coroutines.Dispatchers
@@ -328,16 +330,8 @@ class FileService(
         } ?: audit(claimId, id, "FILE_ADD", clientId, buildJsonObject { put("documentType", documentType); put("fileId", id) })
 
         if (isImage) {
-            BackgroundJobs.insert {
-                it[type] = "ANALYZE_IMAGE"
-                it[payload] = buildJsonObject { put("fileId", id) }
-                it[dedupKey] = "ANALYZE_IMAGE:file:$id"
-                it[status] = "PENDING"
-                it[attempts] = 0
-                it[maxAttempts] = 5
-                it[runAfter] = now
-                it[createdAt] = now
-            }
+            // анализ — в фоне, в той же транзакции: задача не потеряется (вопрос 51, AC-05)
+            JobQueue.enqueue(JobType.ANALYZE_IMAGE, buildJsonObject { put("fileId", id) }, dedupKey = "ANALYZE_IMAGE:file:$id", runAfter = now)
         }
         return UploadResult(UploadOutcome.ACCEPTED, fileDto(id))
     }
