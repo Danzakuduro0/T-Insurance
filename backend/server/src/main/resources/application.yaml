@@ -61,6 +61,27 @@ files:
   maxConcurrentProcessing: 4         # сколько загрузок одновременно проверяются в памяти, остальные ждут
   phashMaxDistance: 5                # фото из разных обращений с отличием хэша до 5 бит из 64 — один снимок
 
+# Шаг 3: фоновый анализ фото (раздел 6 требований)
+analysis:
+  # Адрес ML Image Service (POST {mlUrl}/analyze). Пусто — локальная проверка качества без определения вида повреждения
+  mlUrl: "$ML_URL:"
+  timeoutSeconds: 10            # 6.5: не ответил за 10 с — повтор
+  retryDelaysSeconds: "30,90,270"  # 6.5: паузы между повторами, потом «анализ недоступен»
+  modelVersion: "latest"
+  maxWaitMinutes: 15            # дольше обращение не ждёт анализ — уходит оператору с пометкой
+  routeRecheckSeconds: 30
+
+routing:
+  confidenceThreshold: 0.65     # 6.4: уверенность ниже порога — ручная проверка (обоснование — за ML-инженером)
+
+jobs:
+  enabled: true                 # фоновый воркер
+  pollIntervalMs: 1000
+  batchSize: 10
+  concurrency: 4                # одновременно задач (и запросов к ML-сервису)
+  leaseSeconds: 300             # задача «зависла» у упавшего воркера дольше — возвращается в очередь
+  maintenanceSeconds: 60
+
 security:
   # Запросов к /auth/* в минуту с одного адреса
   authRequestsPerMinute: 30

@@ -1,5 +1,6 @@
 package ru.tinsurance.server.claims
 
+import ru.tinsurance.server.analysis.QualityHints
 import ru.tinsurance.api.ClaimFileDto
 import ru.tinsurance.api.InfoRequestDto
 import ru.tinsurance.api.InfoRequestItemDto
@@ -33,12 +34,15 @@ object ClaimQueries {
                 )
             }
 
-    fun files(claimId: Long): List<ClaimFileDto> =
-        ClaimFiles.join(DocumentTypes, JoinType.INNER, ClaimFiles.documentType, DocumentTypes.code)
+    fun files(claimId: Long): List<ClaimFileDto> {
+        val rows = ClaimFiles.join(DocumentTypes, JoinType.INNER, ClaimFiles.documentType, DocumentTypes.code)
             .selectAll()
             .where { ClaimFiles.claimId eq claimId }
             .orderBy(ClaimFiles.id)
-            .map {
+            .toList()
+        // для фото, отклонённых анализом, подсказка — по конкретным проблемам (размыто, темно…)
+        val qualityIssues = QualityHints.issuesByFile(rows.filter { it[ClaimFiles.rejectionReason] == Rejection.LOW_QUALITY.name }.map { it[ClaimFiles.id] })
+        return rows.map {
                 ClaimFileDto(
                     id = it[ClaimFiles.id],
                     documentType = it[ClaimFiles.documentType],
@@ -49,10 +53,15 @@ object ClaimQueries {
                     status = it[ClaimFiles.status],
                     rejectionReason = it[ClaimFiles.rejectionReason],
                     uploadedAt = it[ClaimFiles.uploadedAt].iso(),
-                    hint = it[ClaimFiles.rejectionReason]?.let { r -> Rejection.entries.firstOrNull { e -> e.name == r }?.hint },
+                    hint = when (val reason = it[ClaimFiles.rejectionReason]) {
+                        null -> null
+                        Rejection.LOW_QUALITY.name -> QualityHints.forIssues(qualityIssues[it[ClaimFiles.id]].orEmpty())
+                        else -> Rejection.entries.firstOrNull { e -> e.name == reason }?.hint
+                    },
                     duplicateOfFileId = if (it[ClaimFiles.status] == "DUPLICATE") it[ClaimFiles.duplicateOfFileId] else null,
                 )
             }
+    }
 
     fun infoRequests(claimId: Long, onlyOpen: Boolean): List<InfoRequestDto> {
         val requests = InfoRequests.selectAll()

@@ -1,5 +1,6 @@
 package ru.tinsurance.server.claims
 
+import ru.tinsurance.server.analysis.QualityHints
 import ru.tinsurance.api.*
 import ru.tinsurance.server.db.*
 import io.ktor.server.config.*
@@ -123,13 +124,15 @@ object CompletenessChecker {
         }
 
         val missingTypes = missingDocuments.map { it.documentType }
-        val problemFiles = if (missingTypes.isEmpty()) emptyList() else ClaimFiles.selectAll()
+        val rejected = if (missingTypes.isEmpty()) emptyList() else ClaimFiles.selectAll()
             .where {
                 (ClaimFiles.claimId eq claimId) and (ClaimFiles.status eq "REJECTED") and
                     ClaimFiles.replacedByFileId.isNull() and (ClaimFiles.documentType inList missingTypes)
             }
             .orderBy(ClaimFiles.id)
-            .map { file ->
+            .toList()
+        val qualityIssues = QualityHints.issuesByFile(rejected.filter { it[ClaimFiles.rejectionReason] == "LOW_QUALITY" }.map { it[ClaimFiles.id] })
+        val problemFiles = rejected.map { file ->
                 val reason = file[ClaimFiles.rejectionReason]
                 val lowQuality = reason == "LOW_QUALITY"
                 val rule = documentRules.first { it.documentType == file[ClaimFiles.documentType] }
@@ -139,7 +142,7 @@ object CompletenessChecker {
                     issue = if (lowQuality) "LOW_QUALITY" else "INVALID_FORMAT",
                     reason = reason,
                     hint = if (lowQuality) {
-                        "Сфотографируйте повреждение крупнее и при хорошем освещении"
+                        QualityHints.forIssues(qualityIssues[file[ClaimFiles.id]].orEmpty())
                     } else {
                         "Загрузите ${formats(rule.allowedMimeTypes)} размером до ${rule.maxSizeBytes / (1024 * 1024)} МБ"
                     },

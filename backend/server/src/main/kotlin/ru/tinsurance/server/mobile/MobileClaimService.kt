@@ -298,22 +298,13 @@ class MobileClaimService(private val db: Database, private val config: ClaimsCon
                 clientTitle = if (status == ClaimStatus.NEEDS_INFO) "Получены дополнительные материалы" else null,
                 at = now,
             )
-            recordCompletenessDecision(claimId, result, now)
+            ClaimIntake.recordCompleteness(claimId, result, now)
 
             if (result.complete) {
-                closeOpenInfoRequest(claimId, "FULFILLED", now)
-                ClaimStatusService.transition(
-                    claimId, ClaimStatus.SUBMITTED, ClaimStatus.IN_ANALYSIS, Actor.SYSTEM,
-                    reason = "Комплект материалов полный", at = now,
-                )
+                // дальше — фоновый анализ фото; обращение не ждёт ML в этом запросе (вопрос 51)
+                ClaimIntake.startAnalysis(claimId, now)
             } else {
-                closeOpenInfoRequest(claimId, "CANCELLED", now)  // заменяется новым запросом с актуальным перечнем
-                createInfoRequest(claimId, result, now)
-                val missing = "Не хватает: ${result.summary()}"
-                ClaimStatusService.transition(
-                    claimId, ClaimStatus.SUBMITTED, ClaimStatus.NEEDS_INFO, Actor.SYSTEM,
-                    reason = missing, clientComment = missing, at = now,
-                )
+                ClaimIntake.requestMaterials(claimId, ClaimStatus.SUBMITTED, result, config.infoRequestDueDays, now)
             }
         }
         return details(clientId, claimId)
@@ -421,106 +412,7 @@ class MobileClaimService(private val db: Database, private val config: ClaimsCon
     }
 
     /** Решение системы о комплектности; предыдущее не перезаписывается, а заменяется (supersedes_id). */
-    private fun recordCompletenessDecision(claimId: Long, result: CompletenessResult, at: OffsetDateTime) {
-        val previous = ClaimDecisions.select(ClaimDecisions.id)
-            .where { (ClaimDecisions.claimId eq claimId) and (ClaimDecisions.kind eq "COMPLETENESS") and (ClaimDecisions.isCurrent eq true) }
-            .singleOrNull()?.get(ClaimDecisions.id)
-        previous?.let { id -> ClaimDecisions.update({ ClaimDecisions.id eq id }) { it[isCurrent] = false } }
-
-        ClaimDecisions.insert {
-            it[ClaimDecisions.claimId] = claimId
-            it[kind] = "COMPLETENESS"
-            it[decisionSource] = "SYSTEM"
-            it[action] = "SET"
-            it[value] = buildJsonObject {
-                put("complete", result.complete)
-                putJsonArray("missingFields") { result.missingFields.forEach { f -> add(f.code) } }
-                putJsonArray("missingDocuments") {
-                    result.missingDocuments.forEach { d ->
-                        addJsonObject {
-                            put("documentType", d.documentType)
-                            put("required", d.required)
-                            put("uploaded", d.uploaded)
-                        }
-                    }
-                }
-                putJsonArray("problemFiles") {
-                    result.problemFiles.forEach { f -> addJsonObject { put("fileId", f.fileId); put("issue", f.issue) } }
-                }
-            }
-            // вопрос 23: для решения на правилах вместо вероятности показываем сработавшие проверки
-            it[reason] = if (result.complete) "Комплект полный" else "Не хватает: ${result.summary()}"
-            it[ruleVersion] = COMPLETENESS_RULES_VERSION
-            it[supersedesId] = previous
-            it[isCurrent] = true
-            it[createdAt] = at
-        }
-    }
-
-    private fun closeOpenInfoRequest(claimId: Long, newStatus: String, at: OffsetDateTime) {
-        val open = InfoRequests.select(InfoRequests.id)
-            .where { (InfoRequests.claimId eq claimId) and (InfoRequests.status eq "OPEN") }
-            .singleOrNull()?.get(InfoRequests.id) ?: return
-        InfoRequests.update({ InfoRequests.id eq open }) {
-            it[status] = newStatus
-            it[closedAt] = at
-        }
-        if (newStatus == "FULFILLED") {
-            InfoRequestItems.update({ InfoRequestItems.requestId eq open }) { it[isFulfilled] = true }
-        }
-    }
-
-    /** Запрос различает «нет файла», «файл отклонён», «плохое качество» и подсказывает, что сделать (вопросы 15, 16, 22). */
-    private fun createInfoRequest(claimId: Long, result: CompletenessResult, at: OffsetDateTime) {
-        val requestId = InfoRequests.insert {
-            it[InfoRequests.claimId] = claimId
-            it[requestSource] = "SYSTEM"
-            it[message] = "Для рассмотрения обращения не хватает материалов. Дополните их и отправьте обращение повторно."
-            it[status] = "OPEN"
-            it[dueAt] = at.plusDays(config.infoRequestDueDays)
-            it[createdAt] = at
-        }[InfoRequests.id]
-
-        result.missingDocuments.forEach { doc ->
-            val problems = result.problemFiles.filter { it.documentType == doc.documentType }
-            problems.forEach { file ->
-                InfoRequestItems.insert {
-                    it[InfoRequestItems.requestId] = requestId
-                    it[documentType] = doc.documentType
-                    it[minCount] = 1
-                    it[issue] = file.issue
-                    it[hint] = file.hint
-                    it[fileId] = file.fileId
-                    it[comment] = "Файл не принят — замените его"
-                    it[isFulfilled] = false
-                }
-            }
-            val stillMissing = doc.required - doc.uploaded - problems.size
-            if (stillMissing > 0) {
-                InfoRequestItems.insert {
-                    it[InfoRequestItems.requestId] = requestId
-                    it[documentType] = doc.documentType
-                    it[minCount] = stillMissing.toShort()
-                    it[issue] = "MISSING"
-                    it[comment] = "Загружено ${doc.uploaded} из ${doc.required}"
-                    it[isFulfilled] = false
-                }
-            }
-        }
-        result.missingFields.forEach { field ->
-            InfoRequestItems.insert {
-                it[InfoRequestItems.requestId] = requestId
-                it[fieldName] = field.code
-                it[minCount] = 1
-                it[issue] = "MISSING"
-                it[comment] = "Заполните поле «${field.title}»"
-                it[isFulfilled] = false
-            }
-        }
-    }
-
     private companion object {
-        const val COMPLETENESS_RULES_VERSION = "completeness-v2"
         const val MAX_PARTICIPANTS = 20
         val PARTICIPANT_ROLES = setOf("APPLICANT_DRIVER", "OTHER_DRIVER", "VICTIM", "WITNESS")
         /** допуск на расхождение часов телефона и сервера */
