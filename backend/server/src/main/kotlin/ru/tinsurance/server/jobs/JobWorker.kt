@@ -112,17 +112,22 @@ class JobWorker(
             JobOutcome.Done -> db.tx { JobQueue.complete(job.id) }
             is JobOutcome.Later -> db.tx { JobQueue.postpone(this, job.id, outcome.delay) }
             is JobOutcome.Retry ->
-                if (job.isLastAttempt) {
-                    handler.giveUp(job, outcome.error)
-                    db.tx { JobQueue.fail(job.id, outcome.error) }
-                } else {
-                    db.tx { JobQueue.retry(job.id, outcome.error, outcome.delay) }
-                }
-            is JobOutcome.Failed -> {
-                handler.giveUp(job, outcome.error)
-                db.tx { JobQueue.fail(job.id, outcome.error) }
-            }
+                if (job.isLastAttempt) giveUpAndFail(handler, job, outcome.error)
+                else db.tx { JobQueue.retry(job.id, outcome.error, outcome.delay) }
+            is JobOutcome.Failed -> giveUpAndFail(handler, job, outcome.error)
         }
+    }
+
+    /** Ошибка в giveUp не должна оставить задачу в RUNNING: она всё равно помечается FAILED. */
+    private suspend fun giveUpAndFail(handler: JobHandler, job: Job, error: String) {
+        try {
+            handler.giveUp(job, error)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("Задача ${job.type} #${job.id}: ошибка при завершении после последней попытки", e)
+        }
+        db.tx { JobQueue.fail(job.id, error) }
     }
 
     private companion object {

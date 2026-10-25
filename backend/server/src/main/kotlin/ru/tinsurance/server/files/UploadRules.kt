@@ -6,6 +6,7 @@ import ru.tinsurance.api.FileStatus
 import ru.tinsurance.server.claims.ClaimRepository
 import ru.tinsurance.server.claims.InfoRequestRepository
 import ru.tinsurance.server.common.ConflictException
+import ru.tinsurance.server.common.NotFoundException
 import ru.tinsurance.server.common.ValidationException
 import ru.tinsurance.server.db.ClaimFiles
 import ru.tinsurance.server.db.Claims
@@ -21,6 +22,16 @@ object UploadRules {
             throw ConflictException("Материалы можно добавлять в черновик или по запросу дополнительных материалов")
         }
         return claim
+    }
+
+    /** Удалить можно только из черновика; после отправки файл заменяют по запросу. */
+    fun deletableFile(clientId: Long, claimId: Long, fileId: Long): ResultRow {
+        val claim = ClaimRepository.findOwned(clientId, claimId, forUpdate = true)
+        if (claim[Claims.status] != ClaimStatus.DRAFT) {
+            throw ConflictException("Удалить файл можно только в черновике — после отправки его заменяют")
+        }
+        return FileRepository.find(claimId, fileId)?.takeIf { it[ClaimFiles.status] != FileStatus.DELETED }
+            ?: throw NotFoundException("Файл не найден")
     }
 
     /** Заменить можно отклонённый файл; принятый — только в черновике или если его замену запросили. */

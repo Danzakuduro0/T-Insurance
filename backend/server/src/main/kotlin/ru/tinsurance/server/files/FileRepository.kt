@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -120,6 +121,10 @@ object FileRepository {
             it[uploadedAt] = at
         }[ClaimFiles.id]
 
+    fun markDeleted(fileId: Long) {
+        ClaimFiles.update({ ClaimFiles.id eq fileId }) { it[status] = FileStatus.DELETED }
+    }
+
     fun markReplaced(oldId: Long, newId: Long) {
         ClaimFiles.update({ ClaimFiles.id eq oldId }) {
             it[status] = FileStatus.REPLACED
@@ -136,7 +141,7 @@ object FileRepository {
     fun listDtos(claimId: Long): List<ClaimFileDto> {
         val rows = ClaimFiles.join(DocumentTypes, JoinType.INNER, ClaimFiles.documentType, DocumentTypes.code)
             .selectAll()
-            .where { ClaimFiles.claimId eq claimId }
+            .where { (ClaimFiles.claimId eq claimId) and (ClaimFiles.status neq FileStatus.DELETED) }
             .orderBy(ClaimFiles.id)
             .toList()
         val qualityIssues = QualityHints.issuesByFile(

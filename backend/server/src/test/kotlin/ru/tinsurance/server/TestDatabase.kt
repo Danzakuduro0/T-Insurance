@@ -35,4 +35,7 @@ object TestDatabase {
         MapApplicationConfig(*(base() + overrides).filterKeys { it !in without }.toList().toTypedArray())
 
     fun connection(): Connection = postgres.postgresDatabase.connection
+
+    /** Для тестов, которые собирают компоненты сервера сами (миграции к этому моменту уже применены приложением). */
+    val database: org.jetbrains.exposed.v1.jdbc.Database by lazy { org.jetbrains.exposed.v1.jdbc.Database.connect(postgres.postgresDatabase) }
 }

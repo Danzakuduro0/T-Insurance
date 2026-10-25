@@ -104,14 +104,14 @@ class RouteClaimHandler(
                 """
                 insert into background_jobs (type, payload, dedup_key, status, attempts, max_attempts, run_after)
                 select 'ROUTE_CLAIM', jsonb_build_object('claimId', c.id),
-                       'ROUTE_CLAIM:claim:' || c.id || ':sweep:' || extract(epoch from now())::bigint,
+                       'ROUTE_CLAIM:claim:' || c.id,
                        'PENDING', 0, ${JobType.ROUTE_CLAIM.maxAttempts}, now()
                   from claims c
                  where c.status = 'IN_ANALYSIS'
                    and not exists (select 1 from background_jobs j
                                     where j.type = 'ROUTE_CLAIM' and j.status in ('PENDING', 'RUNNING')
                                       and (j.payload ->> 'claimId')::bigint = c.id)
-                on conflict (dedup_key) do nothing
+                on conflict (dedup_key) where status in ('PENDING', 'RUNNING') do nothing
                 """.trimIndent(),
             )
         }

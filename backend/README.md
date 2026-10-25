@@ -44,7 +44,8 @@ Mobile app (client, login by phone) — `/api/mobile`:
 `GET /claims/{id}/completeness` (what is missing), `POST /claims/{id}/submit`, `GET /claims/{id}/timeline`.
 Files: `POST /claims/{id}/files` (multipart: `documentType`, `file`, optional `clientRequestId`, `replacesFileId`;
 201 accepted, 200 duplicate/retry, 422 rejected with `rejectionReason` and `hint`, 413 too large),
-`GET /claims/{id}/files/{fileId}/content`. Format is checked by content (JPEG, PNG, PDF), metadata (EXIF/GPS) is
+`GET /claims/{id}/files/{fileId}/content`, `DELETE /claims/{id}/files/{fileId}` (only in a draft: an extra file is marked
+`DELETED` and its content is removed; after submit files are replaced via `replacesFileId`). Format is checked by content (JPEG, PNG, PDF), metadata (EXIF/GPS) is
 removed from photos, files are stored in `STORAGE_DIR` (default `~/.tstrah/files`). Login endpoints are rate-limited
 and a login is locked for 5 minutes after 5 failed attempts.
 

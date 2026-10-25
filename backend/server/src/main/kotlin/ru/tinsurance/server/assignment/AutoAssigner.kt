@@ -15,7 +15,8 @@ import ru.tinsurance.server.db.Claims
 
 /**
  * Автоназначение: обращение из очереди получает оператор направления на смене с наименьшей нагрузкой;
- * вернувшееся после дозагрузки — прежний оператор, если он на смене. Вызывается внутри транзакции.
+ * вернувшееся после дозагрузки — прежний оператор, если он на смене и работает с направлением.
+ * Вызывается внутри транзакции.
  */
 class AutoAssigner(private val operators: OperatorRepository, private val enabled: Boolean) {
 
@@ -26,7 +27,7 @@ class AutoAssigner(private val operators: OperatorRepository, private val enable
         val direction = claim[Claims.directionCode]
         if (claim[Claims.status] != ClaimStatus.QUEUED || direction == null) return null
 
-        val previous = ClaimAssigner.previousOperator(claimId)
+        val previous = ClaimAssigner.previousOperator(claimId)?.takeIf { direction in operators.directions(it) }
         val candidates = (listOfNotNull(previous) + operators.onlineWithCapacity(direction).map { it.id })
             .distinct()
             .filter { it != exclude }

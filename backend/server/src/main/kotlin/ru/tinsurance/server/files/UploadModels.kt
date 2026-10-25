@@ -33,4 +33,5 @@ enum class UploadOutcome(val status: HttpStatusCode) {
 
 data class UploadResult(val outcome: UploadOutcome, val file: ClaimFileDto)
 
-class StoredFile(val mimeType: String, val downloadName: String, val content: InputStream)
+/** Содержимое открывается только при отдаче — и закрывается, даже если клиент оборвал соединение. */
+class StoredFile(val mimeType: String, val downloadName: String, val open: () -> InputStream)

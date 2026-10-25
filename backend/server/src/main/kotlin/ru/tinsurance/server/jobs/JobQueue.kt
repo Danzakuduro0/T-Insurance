@@ -46,7 +46,7 @@ sealed interface JobOutcome {
 object JobQueue {
     private val json = Json
 
-    /** Внутри транзакции. Задача с тем же dedupKey повторно не ставится. */
+    /** Внутри транзакции. Пока задача с тем же dedupKey ждёт или выполняется, такая же не ставится. */
     fun enqueue(type: JobType, payload: JsonObject, dedupKey: String?, runAfter: OffsetDateTime = OffsetDateTime.now()) {
         BackgroundJobs.insertIgnore {
             it[BackgroundJobs.type] = type.name
@@ -120,13 +120,26 @@ object JobQueue {
         }
     }
 
-    /** Задачи, «зависшие» у упавшего воркера дольше [lease], возвращаются в очередь. */
-    fun releaseStale(tx: JdbcTransaction, lease: Duration): Int =
-        tx.exec(
-            "update background_jobs set status = 'PENDING', locked_at = null, locked_by = null " +
-                "where status = 'RUNNING' and locked_at < now() - interval '${lease.toMillis()} milliseconds' returning id",
-            explicitStatementType = StatementType.SELECT,
-        ) { rs -> var n = 0; while (rs.next()) n++; n } ?: 0
+    /**
+     * Задачи, «зависшие» у упавшего воркера дольше [lease], возвращаются в очередь;
+     * у которых попытки кончились — сразу FAILED, а не запускаются сверх лимита.
+     */
+    fun releaseStale(tx: JdbcTransaction, lease: Duration): Int {
+        val stale = "status = 'RUNNING' and locked_at < now() - interval '${lease.toMillis()} milliseconds'"
+        val failed = countUpdated(
+            tx,
+            "update background_jobs set status = 'FAILED', last_error = 'Воркер не завершил последнюю попытку', " +
+                "finished_at = now(), locked_at = null, locked_by = null where $stale and attempts >= max_attempts returning id",
+        )
+        val released = countUpdated(
+            tx,
+            "update background_jobs set status = 'PENDING', locked_at = null, locked_by = null where $stale returning id",
+        )
+        return failed + released
+    }
+
+    private fun countUpdated(tx: JdbcTransaction, sql: String): Int =
+        tx.exec(sql, explicitStatementType = StatementType.SELECT) { rs -> var n = 0; while (rs.next()) n++; n } ?: 0
 
     /** Разбудить ожидающую задачу [type], у которой в payload поле [field] = [value] (например, ROUTE_CLAIM обращения). */
     fun wakeUp(tx: JdbcTransaction, type: JobType, field: String, value: Long) {

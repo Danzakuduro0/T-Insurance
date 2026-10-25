@@ -18,6 +18,6 @@ class ApplicationTest {
     fun healthShowsAppliedSchemaVersion() = withApp {
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("""{"status":"UP","schemaVersion":"6"}""", response.bodyAsText())
+        assertEquals("""{"status":"UP","schemaVersion":"7"}""", response.bodyAsText())
     }
 }

@@ -77,7 +77,8 @@ suspend fun ApplicationCall.respondStoredFile(file: StoredFile) {
         ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, file.downloadName).toString())
     response.header("X-Content-Type-Options", "nosniff")
     response.header(HttpHeaders.CacheControl, "private, no-store")
+    // поток открывается при записи тела и закрывается там же: ответ может быть записан уже после возврата из respond
     respondOutputStream(ContentType.parse(file.mimeType)) {
-        withContext(Dispatchers.IO) { file.content.use { it.copyTo(this@respondOutputStream) } }
+        withContext(Dispatchers.IO) { file.open().use { it.copyTo(this@respondOutputStream) } }
     }
 }

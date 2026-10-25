@@ -36,7 +36,7 @@ object ClaimIntake {
         JobQueue.enqueue(
             JobType.ROUTE_CLAIM,
             buildJsonObject { put("claimId", claimId) },
-            dedupKey = "ROUTE_CLAIM:claim:$claimId:${at.toInstant().toEpochMilli()}",
+            dedupKey = "ROUTE_CLAIM:claim:$claimId",
         )
     }
 

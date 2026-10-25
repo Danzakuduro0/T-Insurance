@@ -19,11 +19,11 @@ import kotlin.test.*
 class AssignmentTest {
 
     /** Обращение прошло анализ и стоит в очереди STANDARD; автоназначение включено. */
-    private fun assignmentTest(block: suspend ClaimFlow.() -> Unit) = FakeMl().use { ml ->
+    private fun assignmentTest(block: suspend ClaimFlow.(FakeMl) -> Unit) = FakeMl().use { ml ->
         claimFlowTest("analysis.mlUrl" to ml.url, "assignment.autoAssign" to "true") {
             sql("update users set availability = 'OFFLINE' where email like 'assign-%'")
             try {
-                block()
+                block(ml)
             } finally {
                 sql("update users set availability = 'OFFLINE' where email like 'assign-%'")
             }
@@ -152,6 +152,24 @@ class AssignmentTest {
         runWorker()
         assertEquals("ASSIGNED", status(claimId))
         assertEquals(previous.user.id, assignee(claimId))
+    }
+
+    @Test
+    fun returnedClaimInAnotherDirectionGoesToOperatorOfThatDirection() = assignmentTest { ml ->
+        val previous = operator("STANDARD", online = true)
+        val claimId = queuedClaim()
+        assertEquals(previous.user.id, assignee(claimId))
+        val expert = operator("MANUAL_REVIEW", online = true)
+
+        sql("update claims set status = 'IN_REVIEW' where id = $claimId")
+        sql("update claims set status = 'NEEDS_INFO', assigned_operator_id = null where id = $claimId")
+        // новое фото модель не узнаёт уверенно — после повторной отправки обращение уходит на ручную проверку
+        ml.respond = { 200 to FakeMl.ok("DENT", 0.3) }
+        upload(claimId, noise(seed = 99))
+        submit(claimId)
+        runWorker()
+        assertEquals("MANUAL_REVIEW", query("select direction_code from claims where id = $claimId"))
+        assertEquals(expert.user.id, assignee(claimId))
     }
 
     @Test
