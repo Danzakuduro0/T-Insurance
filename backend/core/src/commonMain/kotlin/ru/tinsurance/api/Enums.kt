@@ -58,7 +58,12 @@ enum class InfoRequestStatus { OPEN, FULFILLED, CANCELLED }
 enum class MaterialIssue { MISSING, INVALID_FORMAT, LOW_QUALITY }
 
 @Serializable
-enum class DecisionKind { COMPLETENESS, DUPLICATE, DAMAGE, ROUTING, PRIORITY, REVIEW_RESULT }
+enum class DecisionKind {
+    COMPLETENESS, DUPLICATE, DAMAGE, ROUTING, PRIORITY, REVIEW_RESULT;
+
+    /** Решения, которые оператор подтверждает или исправляет. */
+    val isReviewable get() = this == DAMAGE || this == ROUTING || this == PRIORITY
+}
 
 @Serializable
 enum class DecisionSource { SYSTEM, OPERATOR }
@@ -69,6 +74,10 @@ enum class DecisionAction { SET, CONFIRM, OVERRIDE }
 /** EXACT — тот же файл байт в байт, SIMILAR — тот же снимок, пересжатый или уменьшенный. */
 @Serializable
 enum class MatchType { EXACT, SIMILAR }
+
+/** Виды повреждений, которые различает модель. */
+@Serializable
+enum class DamageType { SCRATCH, DENT, BROKEN_GLASS, BUMPER_DAMAGE, HEADLIGHT_DAMAGE }
 
 @Serializable
 enum class CommentVisibility { INTERNAL, CLIENT }

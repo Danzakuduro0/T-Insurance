@@ -21,6 +21,8 @@ fun ApplicationConfig.seconds(path: String, default: Long): Duration = Duration.
 
 fun ApplicationConfig.minutes(path: String, default: Long): Duration = Duration.ofMinutes(long(path, default))
 
+fun ApplicationConfig.days(path: String, default: Long): Duration = Duration.ofDays(long(path, default))
+
 fun ApplicationConfig.millis(path: String, default: Long): Duration = Duration.ofMillis(long(path, default))
 
 fun ApplicationConfig.list(path: String): List<String> = propertyOrNull(path)?.getList().orEmpty()

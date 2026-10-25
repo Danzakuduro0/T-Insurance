@@ -6,6 +6,9 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -44,6 +47,10 @@ object SessionRepository {
             it[lastUsedAt] = at
         }
     }
+
+    /** Удаляет сессии, истёкшие или отозванные раньше [before]; возвращает их число. */
+    fun deleteStale(before: OffsetDateTime): Int =
+        AuthSessions.deleteWhere { (AuthSessions.expiresAt less before) or (AuthSessions.revokedAt less before) }
 
     /** Сессия не отозвана, не истекла, пользователь не заблокирован. */
     fun isActive(sessionId: Long, userId: Long, now: OffsetDateTime): Boolean =

@@ -91,3 +91,5 @@ security:
   loginLockMinutes: 5
   # Максимальный размер JSON-запроса, байт
   maxJsonBodyBytes: 262144
+  # Через сколько дней после истечения или выхода сессия удаляется из БД
+  sessionRetentionDays: 30

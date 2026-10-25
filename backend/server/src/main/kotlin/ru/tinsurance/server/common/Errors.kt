@@ -8,4 +8,5 @@ open class ApiException(val status: HttpStatusCode, val code: String, message: S
 class NotFoundException(message: String = "Не найдено") : ApiException(HttpStatusCode.NotFound, "NOT_FOUND", message)
 class UnauthorizedException(message: String) : ApiException(HttpStatusCode.Unauthorized, "UNAUTHORIZED", message)
 class ValidationException(message: String) : ApiException(HttpStatusCode.BadRequest, "VALIDATION_ERROR", message)
+class ForbiddenException(message: String) : ApiException(HttpStatusCode.Forbidden, "FORBIDDEN", message)
 class ConflictException(message: String) : ApiException(HttpStatusCode.Conflict, "CONFLICT", message)
