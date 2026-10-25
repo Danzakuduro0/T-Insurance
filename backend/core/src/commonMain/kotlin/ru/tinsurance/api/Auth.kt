@@ -34,6 +34,8 @@ data class UserDto(
     val fullName: String,
     val phone: String?,
     val email: String?,
+    /** Только у сотрудников: на смене ли он. */
+    val availability: OperatorAvailability? = null,
 )
 
 @Serializable

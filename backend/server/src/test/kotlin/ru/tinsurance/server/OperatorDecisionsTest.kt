@@ -26,9 +26,11 @@ class OperatorDecisionsTest {
         }
     }
 
-    /** До шага 5 обращение назначается напрямую в БД — Марии: на демо-обращение Дмитрия опираются другие тесты. */
-    private fun assign(claimId: Long, operatorId: Long) =
-        sql("update claims set status = 'ASSIGNED', assigned_operator_id = $operatorId where id = $claimId")
+    /** Обращение берёт Мария: на демо-обращение Дмитрия опираются другие тесты. */
+    private suspend fun ClaimFlow.take(operator: AuthResponse, claimId: Long) {
+        val response = http.post(OperatorApi.CLAIM_TAKE.path("id" to claimId)) { bearerAuth(operator.accessToken) }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+    }
 
     private suspend fun HttpClient.card(token: String, claimId: Long) =
         get(OperatorApi.CLAIM.path("id" to claimId)) { bearerAuth(token) }.body<ClaimCard>()
@@ -48,7 +50,7 @@ class OperatorDecisionsTest {
     @Test
     fun assignedOperatorConfirmsSystemDecision() = decisionsTest { claimId ->
         val operator = http.loginOperator(DemoData.OPERATOR_1)
-        assign(claimId, operator.user.id)
+        take(operator, claimId)
 
         val response = http.confirm(operator.accessToken, claimId, DecisionKind.DAMAGE)
         assertEquals(HttpStatusCode.OK, response.status)
@@ -68,7 +70,7 @@ class OperatorDecisionsTest {
     @Test
     fun overrideNeedsReasonAndKeepsOriginalDecision() = decisionsTest { claimId ->
         val operator = http.loginOperator(DemoData.OPERATOR_1)
-        assign(claimId, operator.user.id)
+        take(operator, claimId)
         val token = operator.accessToken
 
         fun routing(direction: String?, reason: String) = OverrideDecisionRequest(DecisionKind.ROUTING, reason, direction = direction)
@@ -108,7 +110,7 @@ class OperatorDecisionsTest {
         // в очереди обращение ещё никому не назначено
         assertEquals(HttpStatusCode.Forbidden, http.override(assigned.accessToken, claimId, priority).status)
 
-        assign(claimId, assigned.user.id)
+        take(assigned, claimId)
         assertEquals(HttpStatusCode.Forbidden, http.override(other.accessToken, claimId, priority).status)
         assertEquals(HttpStatusCode.Forbidden, http.confirm(other.accessToken, claimId, DecisionKind.DAMAGE).status)
         assertEquals(HttpStatusCode.BadRequest, http.confirm(assigned.accessToken, claimId, DecisionKind.COMPLETENESS).status)

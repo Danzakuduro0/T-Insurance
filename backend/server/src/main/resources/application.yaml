@@ -74,6 +74,11 @@ analysis:
 routing:
   confidenceThreshold: 0.65     # 6.4: уверенность ниже порога — ручная проверка (обоснование — за ML-инженером)
 
+assignment:
+  autoAssign: true              # назначать обращения операторам на смене автоматически
+  # лимит обращений в работе, если у оператора не задан свой (users.max_active_claims)
+  defaultMaxActiveClaims: 5
+
 jobs:
   enabled: true                 # фоновый воркер
   pollIntervalMs: 1000

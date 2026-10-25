@@ -1134,6 +1134,206 @@
           ]
         },
         {
+          "name": "Выйти на смену (ONLINE)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me",
+                "availability"
+              ]
+            },
+            "description": "ONLINE — система сразу назначает обращения из очереди направлений оператора (до лимита). BREAK и OFFLINE — новые не назначаются. Демо-операторы стартуют в OFFLINE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"ONLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Взять в работу",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/take",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "take"
+              ]
+            },
+            "description": "QUEUED → ASSIGNED на себя. 409 — обращение уже взял другой оператор (или его назначила система при выходе на смену) либо достигнут лимит; 403 — чужое направление."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 409 если обращение уже в работе\", () => pm.expect([200, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Начать рассмотрение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/start-review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "start-review"
+              ]
+            },
+            "description": "ASSIGNED → IN_REVIEW, только назначенный оператор."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, 403 или 409 — зависит от того, кому назначено обращение\", () => pm.expect([200, 403, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вернуть в очередь",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "release"
+              ]
+            },
+            "description": "ASSIGNED/IN_REVIEW → QUEUED, причина обязательна. Обращение сразу предлагается другому оператору на смене.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Нужна консультация старшего специалиста\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, 403 или 409 — зависит от того, кому назначено обращение\", () => pm.expect([200, 403, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Уйти со смены (OFFLINE)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me",
+                "availability"
+              ]
+            },
+            "description": "Новые обращения не назначаются; уже взятые остаются у оператора.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Обновить токен (refresh)",
           "request": {
             "method": "POST",

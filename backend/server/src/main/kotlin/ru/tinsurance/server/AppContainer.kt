@@ -7,6 +7,10 @@ import ru.tinsurance.server.analysis.AnalyzeImageHandler
 import ru.tinsurance.server.analysis.HttpImageAnalyzer
 import ru.tinsurance.server.analysis.ImageAnalyzer
 import ru.tinsurance.server.analysis.LocalImageAnalyzer
+import ru.tinsurance.server.assignment.AssignmentConfig
+import ru.tinsurance.server.assignment.AssignmentService
+import ru.tinsurance.server.assignment.AutoAssigner
+import ru.tinsurance.server.assignment.OperatorRepository
 import ru.tinsurance.server.auth.AuthService
 import ru.tinsurance.server.auth.LoginThrottle
 import ru.tinsurance.server.auth.LoginThrottleConfig
@@ -46,6 +50,10 @@ class AppContainer(
     val uploads = UploadService(database, storage, filesConfig)
     val fileAccess = FileAccessService(database, storage)
     val decisions = DecisionReviewService(database)
+    private val assignmentConfig = AssignmentConfig.from(config)
+    private val operators = OperatorRepository(assignmentConfig.defaultMaxActiveClaims)
+    private val autoAssigner = AutoAssigner(operators, assignmentConfig.autoAssign)
+    val assignments = AssignmentService(database, operators, autoAssigner)
     private val sessionRetention = config.days("security.sessionRetentionDays", 30)
 
     val analysisConfig = AnalysisConfig.from(config)
@@ -54,12 +62,13 @@ class AppContainer(
         database,
         handlers = listOf(
             AnalyzeImageHandler(database, imageAnalyzer(), analysisConfig),
-            RouteClaimHandler(database, analysisConfig, RoutingConfig.from(config), claimsConfig),
+            RouteClaimHandler(database, analysisConfig, RoutingConfig.from(config), claimsConfig, autoAssigner),
         ),
         config = workerConfig,
         maintenanceTasks = listOf(
             { database.tx { RouteClaimHandler.scheduleMissing(this) } },
             { database.tx { SessionRepository.deleteStale(OffsetDateTime.now().minus(sessionRetention)) } },
+            { database.tx { autoAssigner.sweep() } },
         ),
     )
 

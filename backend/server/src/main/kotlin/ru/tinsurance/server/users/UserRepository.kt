@@ -52,4 +52,5 @@ fun ResultRow.toUserDto() = UserDto(
     fullName = this[Users.fullName],
     phone = this[Users.phone],
     email = this[Users.email],
+    availability = this[Users.availability],
 )

@@ -26,6 +26,8 @@ object TestDatabase {
         "storage.localDir" to storageDir.toString(),
         // фоновый воркер в тестах не крутится сам — тест вызывает runReady() там, где нужно
         "jobs.enabled" to "false",
+        // автоназначение включают только тесты назначения — остальные ждут обращения в очереди
+        "assignment.autoAssign" to "false",
     )
 
     /** Конфиг тестов; overrides заменяют значения, without — убирает ключи. */
