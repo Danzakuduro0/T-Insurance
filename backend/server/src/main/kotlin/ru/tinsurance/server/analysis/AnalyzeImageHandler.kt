@@ -79,11 +79,13 @@ class AnalyzeImageHandler(
                 )
             }
 
+    /** Блокировка обращения упорядочивает анализ с отправкой и маршрутизацией: статус читается актуальный. */
     private fun org.jetbrains.exposed.v1.jdbc.JdbcTransaction.save(request: AnalysisRequest, result: AnalysisResult) {
+        val claimStatus = ClaimRepository.findForUpdate(request.claimId)?.get(Claims.status) ?: return
         ImageAnalysisRepository.insert(request.fileId, result, OffsetDateTime.now())
         setAnalysisStatus(request.fileId, AnalysisStatus.DONE)
         // пока клиент может заменить фото, непригодное отклоняется; у оператора — только показывается в карточке
-        if (!result.qualityAcceptable && ClaimRepository.status(request.claimId) in REPLACEABLE) reject(request, result)
+        if (!result.qualityAcceptable && claimStatus in REPLACEABLE) reject(request, result)
         JobQueue.wakeUp(this, JobType.ROUTE_CLAIM, "claimId", request.claimId)
     }
 

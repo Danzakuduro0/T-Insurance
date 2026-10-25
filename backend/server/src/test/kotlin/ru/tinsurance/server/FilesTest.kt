@@ -389,4 +389,30 @@ class FilesTest {
         assertEquals(annaFile.id, flagged.fileId)
         assertEquals(MatchType.SIMILAR, flagged.match)
     }
+
+    @Test
+    fun clientDeletesExtraFileOnlyFromDraft() = apiTest { http ->
+        val s = http.anna()
+        val claim = s.accidentDraft()
+        val extra = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(31)).body<ClaimFileDto>()
+        val path = MobileApi.CLAIM_FILE.path("id" to claim.id, "fileId" to extra.id)
+        val storageKey = query("select storage_key from claim_files where id = ${extra.id}")!!
+
+        assertEquals(HttpStatusCode.NotFound, http.delete(path) { bearerAuth(http.client(DemoData.CLIENT_OLEG).token) }.status)
+        assertEquals(HttpStatusCode.NoContent, http.delete(path) { bearerAuth(s.token) }.status)
+        assertEquals(HttpStatusCode.NotFound, http.delete(path) { bearerAuth(s.token) }.status)
+
+        val details = http.get("/api/mobile/claims/${claim.id}") { bearerAuth(s.token) }.body<ClaimDetails>()
+        assertTrue(details.files.none { it.id == extra.id })
+        assertEquals(HttpStatusCode.NotFound, http.get("$path/content") { bearerAuth(s.token) }.status)
+        assertFalse(java.nio.file.Files.exists(TestDatabase.storageDir.resolve(storageKey)))
+        assertEquals("DELETED", query("select status from claim_files where id = ${extra.id}"))
+        assertEquals("1", query("select count(*) from audit_log where entity_id = ${extra.id} and action = 'FILE_DELETE'"))
+
+        // после отправки файл не удаляется, а заменяется по запросу
+        val kept = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(32)).body<ClaimFileDto>()
+        http.post("/api/mobile/claims/${claim.id}/submit") { bearerAuth(s.token) }
+        val afterSubmit = http.delete(MobileApi.CLAIM_FILE.path("id" to claim.id, "fileId" to kept.id)) { bearerAuth(s.token) }
+        assertEquals(HttpStatusCode.Conflict, afterSubmit.status)
+    }
 }

@@ -47,6 +47,10 @@ fun Route.mobileRoutes(auth: AuthService, claims: MobileClaimService, uploads: U
             val result = call.receiveUpload(uploads.maxFileBytes()).use { form -> uploads.upload(call.user.userId, claimId, form) }
             call.respond(result.outcome.status, result.file)
         }
+        delete(MobileApi.CLAIM_FILE) {
+            uploads.deleteFromDraft(call.user.userId, call.longParam("id"), call.longParam("fileId"))
+            call.respond(HttpStatusCode.NoContent)
+        }
         get(MobileApi.CLAIM_FILE_CONTENT) {
             call.respondStoredFile(files.openForClient(call.user.userId, call.longParam("id"), call.longParam("fileId")))
         }

@@ -42,7 +42,7 @@ enum class FieldKind { CORE, DETAIL }
 enum class FieldValueType { STRING, BOOLEAN, NUMBER, LIST }
 
 @Serializable
-enum class FileStatus { UPLOADED, ACCEPTED, REJECTED, DUPLICATE, REPLACED }
+enum class FileStatus { UPLOADED, ACCEPTED, REJECTED, DUPLICATE, REPLACED, DELETED }
 
 @Serializable
 enum class RejectionReason { UNSUPPORTED_FORMAT, CORRUPTED, TOO_MANY_PIXELS, ACTIVE_CONTENT, LOW_QUALITY }

@@ -213,7 +213,7 @@
 | POST /api/v1/claims/{id}/documents — Загрузить файл (multipart/form-data) | `POST /api/mobile/claims/{id}/files` — multipart: `documentType`, `file`, необязательные `clientRequestId`, `replacesFileId`. Ответ: 201 принят / 200 дубль или повтор / 422 отклонён (`rejectionReason`, `hint`) / 413 — **сделано** |
 | GET /api/v1/claims/{id}/documents — Список документов | Список файлов входит в `GET /api/mobile/claims/{id}` и в карточку оператора — **сделано** |
 | GET …/documents/{doc_id}/download — OPERATOR, ADMIN — presigned URL | `GET /api/mobile/claims/{id}/files/{fileId}/content` (владелец) и `GET /api/operator/claims/{id}/files/{fileId}/content` (оператор) — файл отдаётся сервером с проверкой прав — **сделано** |
-| DELETE …/documents/{doc_id} — CLIENT (только DRAFT/PENDING_INFO) | Удаления нет: файл заменяется через `replacesFileId`, история сохраняется. Можно добавить удаление в DRAFT (пометка, без стирания) — если нужно фронтенду |
+| DELETE …/documents/{doc_id} — CLIENT (только DRAFT/PENDING_INFO) | `DELETE /api/mobile/claims/{id}/files/{fileId}` — только в черновике (DRAFT): запись остаётся в журнале со статусом `DELETED`, содержимое удаляется. После отправки файл заменяют через `replacesFileId` — **сделано** |
 | Максимальный размер файла: 15 MB | Размер — по типу документа (`document_types.max_size_bytes`): фото и извещение — 20 МБ, удостоверение и СТС — 10 МБ (или привести к 15 МБ — см. «Что поменять в бэкенде») |
 | Максимум файлов на обращение: 20 — HTTP 422 | Максимум 15 файлов и 100 МБ на обращение — HTTP 409, `"error": "FILES_LIMIT"` |
 | Файл читаем (не повреждён) — HTTP 422 | + изображение декодируется целиком, слишком большое по пикселям отклоняется, PDF со скриптами отклоняется — HTTP 422 с подсказкой |
@@ -226,9 +226,9 @@
 | Было | Стало |
 |---|---|
 | GET /api/v1/queue | `GET /api/operator/queue` — **сделано** |
-| POST /api/v1/queue/{id}/acquire — Захватить обращение (оптимистичная блокировка) | `POST /api/operator/claims/{id}/assign` («Взять в работу», QUEUED → ASSIGNED) + `POST /api/operator/queue/next` (взять следующее). Плюс автоназначение наименее загруженному оператору нужного направления — этап 5 |
-| POST /api/v1/queue/{id}/release | `POST /api/operator/claims/{id}/release` — этап 5 |
-| POST /api/v1/queue/{id}/reassign — ADMIN | `POST /api/operator/claims/{id}/reassign` — ADMIN, обязательный комментарий — этап 5 |
+| POST /api/v1/queue/{id}/acquire — Захватить обращение (оптимистичная блокировка) | `POST /api/operator/claims/{id}/take` («Взять в работу», QUEUED → ASSIGNED), `POST /api/operator/claims/{id}/start-review` (ASSIGNED → IN_REVIEW). Вместо «взять следующее» — автоназначение: оператор на смене (`PUT /api/operator/me/availability`) сразу получает обращения своего направления с учётом нагрузки — **сделано** |
+| POST /api/v1/queue/{id}/release | `POST /api/operator/claims/{id}/release` `{"reason"}` — **сделано** |
+| POST /api/v1/queue/{id}/reassign — ADMIN | `POST /api/operator/claims/{id}/assign` `{"operatorId","reason"}` — ADMIN: назначить из очереди или передать другому оператору; список операторов с нагрузкой — `GET /api/operator/operators` — **сделано** |
 | priority — enum[] — NORMAL, HIGH, CRITICAL | `minPriority` — число 1–3 (1 обычный, 2 повышенный, 3 высокий) |
 | incident_type — uuid | `eventType` — код (`CAR_ACCIDENT`) |
 | assigned_to — uuid / me | `assigned=me` \| `none`, `assignedTo={id}` |
@@ -237,14 +237,14 @@
 | q — string | `search` — номер обращения, номер договора или имя клиента |
 | limit — 10–100, default 20 / cursor | `limit` 1–200, по умолчанию 50 / `offset` |
 | *(нет)* | `status` (можно несколько), `direction` (`STANDARD` / `MANUAL_REVIEW`), `manualReview=true` |
-| UPDATE claims SET assigned_to = …, locked_at = NOW() WHERE id = … AND assigned_to IS NULL AND status = 'QUEUED' — 0 rows → 409 "claim/already-acquired" | Тот же принцип: условное обновление по `status = 'QUEUED' AND assigned_operator_id IS NULL`; для «взять следующее» — `FOR UPDATE SKIP LOCKED`. Если обращение уже взято → 409 `"error": "ALREADY_ASSIGNED"`. Тест на два одновременных запроса — этап 5 |
+| UPDATE claims SET assigned_to = …, locked_at = NOW() WHERE id = … AND assigned_to IS NULL AND status = 'QUEUED' — 0 rows → 409 "claim/already-acquired" | Строка обращения блокируется (`FOR UPDATE`), второй запрос видит, что обращение уже взято → 409 `"error": "CONFLICT"`; автоназначение берёт обращения с `FOR UPDATE SKIP LOCKED`. Тест на два одновременных запроса есть — **сделано** |
 
 ### 3.3.4 ML Override API
 
 | Было | Стало |
 |---|---|
-| POST /api/v1/claims/{id}/ml-result/override | `POST /api/operator/claims/{id}/decisions/{decisionId}/override` и `/confirm` — этап 4 |
-| Тело: "damage_type", "quality_acceptable", "comment" | Тело: `{"fileId": 42, "damageType": "DENT", "qualityAcceptable": true, "reason": "…"}` — `reason` обязателен (проверка в БД) |
+| POST /api/v1/claims/{id}/ml-result/override | `POST /api/operator/claims/{id}/decisions/override` и `/decisions/confirm` — **сделано** |
+| Тело: "damage_type", "quality_acceptable", "comment" | Тело: `{"kind": "DAMAGE", "damageType": "DENT", "reason": "…"}`; так же исправляются направление (`"kind": "ROUTING", "direction"`) и приоритет (`"kind": "PRIORITY", "priority"`). `reason` обязателен. Подтверждение: `{"kind": "DAMAGE"}` без причины |
 | Ответ включает original_result и override_result — оба сохраняются | Исходное решение системы не меняется. Исправление — новая запись в `claim_decisions` (action `OVERRIDE`, ссылка `supersedes_id` на исходную), результат модели остаётся в `image_analyses`. В карточке видны оба |
 
 ### 3.3.5 Notifications API
@@ -319,5 +319,5 @@
 | Проблемы качества | BLURRY, LOW_LIGHT, OVEREXPOSED, LOW_RESOLUTION, NO_DAMAGE_VISIBLE | Свой список | Принять как в документе. Черновик уже приведён |
 | Размер файла | 15 МБ | 20 МБ (10 МБ у удостоверения и СТС) | Решить командой: либо 15 МБ в бэкенде (новая миграция), либо 20 МБ в документе |
 | Файлов на обращение | 20 | 15 | То же |
-| Удаление документа | В DRAFT/PENDING_INFO | Только замена | Добавить удаление в черновике (пометкой, без стирания) |
+| Удаление документа | В DRAFT/PENDING_INFO | В черновике — удаление (пометка `DELETED`), после отправки — замена | Сделано; в документе уточнить: после отправки удаления нет, только замена по запросу |
 | Формат ошибок | RFC 7807 | Свой | См. вопрос 0.2 |

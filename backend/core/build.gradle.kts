@@ -3,9 +3,17 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
-// Общие модели запросов/ответов. В бэкенде собираются только под JVM — для сервера не нужен Android SDK
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
+// Общие модели запросов/ответов: сервер (jvm), веб оператора (wasmJs, js), приложение (jvm-вариант для Android, iOS).
+// Android-таргета нет — Android-приложение использует jvm-вариант, поэтому Android SDK бэкенду не нужен.
 kotlin {
     jvm()
+    js { browser() }
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain.dependencies {

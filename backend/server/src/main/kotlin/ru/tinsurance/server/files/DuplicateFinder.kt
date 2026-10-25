@@ -16,7 +16,7 @@ class DuplicateFinder(private val phashMaxDistance: Int) {
     fun findElsewhere(claimId: Long, sha256: String, phash: Long?): FileMatch? {
         val otherClaims = (ClaimFiles.claimId neq claimId) and (ClaimFiles.status eq FileStatus.ACCEPTED)
         return first((ClaimFiles.sha256 eq sha256) and otherClaims)
-            ?: phash?.let { first(HammingDistanceAtMost(ClaimFiles.phash, it, phashMaxDistance) and otherClaims) }
+            ?: phash?.let { first(ClaimFiles.phash.isNotNull() and HammingDistanceAtMost(ClaimFiles.phash, it, phashMaxDistance) and otherClaims) }
     }
 
     private fun first(condition: Op<Boolean>): FileMatch? =

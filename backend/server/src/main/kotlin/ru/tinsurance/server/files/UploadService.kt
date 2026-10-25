@@ -6,6 +6,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.jdbc.Database
+import ru.tinsurance.server.claims.Actor
+import ru.tinsurance.server.claims.AuditEntity
+import ru.tinsurance.server.claims.AuditWriter
 import ru.tinsurance.server.common.ApiException
 import ru.tinsurance.server.common.ConflictException
 import ru.tinsurance.server.common.ValidationException
@@ -58,6 +61,17 @@ class UploadService(
             }
             store(target, documentType, inspected, form.replacesFileId)
         }
+    }
+
+    /** Лишний файл из черновика: запись остаётся в журнале со статусом DELETED, содержимое удаляется. */
+    suspend fun deleteFromDraft(clientId: Long, claimId: Long, fileId: Long) {
+        val storageKey = db.tx {
+            val file = UploadRules.deletableFile(clientId, claimId, fileId)
+            FileRepository.markDeleted(fileId)
+            AuditWriter.record(claimId, AuditEntity.FILE, fileId, "FILE_DELETE", Actor.client(clientId))
+            file[ClaimFiles.storageKey]
+        }
+        if (storageKey.startsWith(FileRepository.STORED_PREFIX)) withContext(Dispatchers.IO) { storage.delete(storageKey) }
     }
 
     private sealed interface Precheck {

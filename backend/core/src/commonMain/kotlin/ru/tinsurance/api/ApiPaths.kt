@@ -18,7 +18,8 @@ object MobileApi {
     const val CLAIM_SUBMIT = "$CLAIM/submit"
     const val CLAIM_TIMELINE = "$CLAIM/timeline"
     const val CLAIM_FILES = "$CLAIM/files"
-    const val CLAIM_FILE_CONTENT = "$CLAIM_FILES/{fileId}/content"
+    const val CLAIM_FILE = "$CLAIM_FILES/{fileId}"
+    const val CLAIM_FILE_CONTENT = "$CLAIM_FILE/content"
 }
 
 object OperatorApi {

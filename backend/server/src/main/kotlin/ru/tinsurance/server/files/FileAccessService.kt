@@ -28,7 +28,7 @@ class FileAccessService(private val db: Database, private val storage: FileStora
         return StoredFile(
             mimeType = file[ClaimFiles.mimeType],
             downloadName = "claim-$claimId-file-$fileId.$ext",
-            content = storage.open(file[ClaimFiles.storageKey]),
+            open = { storage.open(file[ClaimFiles.storageKey]) },
         )
     }
 }
