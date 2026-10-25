@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import ru.tinsurance.server.db.AuditLog
 import java.time.OffsetDateTime
 
-enum class AuditEntity { CLAIM, FILE }
+enum class AuditEntity { CLAIM, FILE, DECISION }
 
 /** Журнал действий (audit_log). Вызывается внутри транзакции. */
 object AuditWriter {

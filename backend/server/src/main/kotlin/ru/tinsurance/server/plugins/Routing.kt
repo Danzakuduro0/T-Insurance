@@ -23,6 +23,6 @@ fun Application.configureRouting(app: AppContainer) {
             call.respond(HealthResponse(status = "UP", schemaVersion = schemaVersion))
         }
         mobileRoutes(app.auth, app.mobileClaims, app.uploads, app.fileAccess)
-        operatorRoutes(app.auth, app.operatorClaims, app.fileAccess)
+        operatorRoutes(app.auth, app.operatorClaims, app.decisions, app.fileAccess)
     }
 }

@@ -78,7 +78,7 @@ object DemoData {
                 description = "Камень из-под колеса, трещина на лобовом стекле",
                 path = listOf(SUBMITTED, IN_ANALYSIS, QUEUED),
                 files = listOf("DAMAGE_PHOTO" to 2),
-                routing = Routing("STANDARD", priority = 1, damage = "GLASS", confidence = 0.93f))
+                routing = Routing("STANDARD", priority = 1, damage = "BROKEN_GLASS", confidence = 0.93f))
 
             // 4. Сомнительный: низкая уверенность модели, ручная проверка, SLA просрочен
             claim(anna, annaPolicy, "CAR_ACCIDENT", daysAgo = 3, location = "Новосибирск, парковка ТЦ",

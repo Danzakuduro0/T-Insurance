@@ -67,6 +67,13 @@ Queue date filters use the operator's time zone: pass `tz` (IANA, from `Intl.Dat
 without it `APP_TIME_ZONE` is used (default `Europe/Moscow`). In the card each file has `foundInOtherClaim` when the same
 photo (exact copy or a resized/recompressed one) was uploaded to another claim.
 
+Operator decisions (step 4): `GET /directions` (for the routing form),
+`POST /claims/{id}/decisions/confirm` `{"kind":"DAMAGE|ROUTING|PRIORITY"}` — agree with the system decision,
+`POST /claims/{id}/decisions/override` `{"kind":…, "reason":"…", "priority"|"direction"|"damageType":…}` — correct it
+(reason is required, the original decision stays in the card with `isCurrent=false`). Both return the updated card.
+An operator can change only a claim assigned to them (`ASSIGNED` / `IN_REVIEW`), otherwise 403; an admin can also change
+queued claims. Expired and revoked sessions are deleted after `security.sessionRetentionDays` (30).
+
 Access tokens stop working immediately after logout, refresh rotation or user deactivation (the session is checked on every request).
 
 ### Docker

@@ -42,6 +42,13 @@ object EventTypeFields : Table("event_type_fields") {
     override val primaryKey = PrimaryKey(eventType, fieldCode)
 }
 
+object Directions : Table("directions") {
+    val code = text("code")
+    val name = text("name")
+    val description = text("description").nullable()
+    override val primaryKey = PrimaryKey(code)
+}
+
 object RequiredDocuments : Table("required_documents") {
     val eventType = text("event_type")
     val documentType = text("document_type")

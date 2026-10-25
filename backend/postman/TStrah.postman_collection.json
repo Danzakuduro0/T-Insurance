@@ -968,6 +968,172 @@
           ]
         },
         {
+          "name": "Направления (для формы исправления)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/directions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "directions"
+              ]
+            },
+            "description": "Коды направлений для исправления решения ROUTING: STANDARD, MANUAL_REVIEW."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мои обращения в работе",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?assigned=me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "assigned",
+                  "value": "me"
+                }
+              ]
+            },
+            "description": "Решения меняет оператор, которому назначено обращение. У demo-оператора operator2 это обращение в статусе IN_REVIEW; его id сохраняется в myClaimId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items;",
+                  "if (items.length) pm.collectionVariables.set(\"myClaimId\", items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подтвердить вид повреждения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{myClaimId}}/decisions/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{myClaimId}}",
+                "decisions",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"DAMAGE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Оператор согласен с решением системы (kind: DAMAGE, ROUTING или PRIORITY). Причина не нужна. Ответ — обновлённая карточка. Повторный запуск — 409: решение уже проверено."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 409 при повторном запуске\", () => pm.expect([200, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Исправить направление (с причиной)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{myClaimId}}/decisions/override",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{myClaimId}}",
+                "decisions",
+                "override"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"ROUTING\",\n  \"direction\": \"MANUAL_REVIEW\",\n  \"reason\": \"Повреждены несколько деталей — нужна проверка эксперта\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Причина обязательна. Для PRIORITY — поле priority (1–3), для DAMAGE — damageType (SCRATCH, DENT, BROKEN_GLASS, BUMPER_DAMAGE, HEADLIGHT_DAMAGE). Исходное решение остаётся в карточке с isCurrent=false. Повторный запуск с тем же значением — 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 400 при повторном запуске\", () => pm.expect([200, 400]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const routing = pm.response.json().decisions.find(d => d.kind === \"ROUTING\" && d.isCurrent);",
+                  "  pm.test(\"решение исправлено оператором\", () => pm.expect(routing.action).to.eql(\"OVERRIDE\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Обновить токен (refresh)",
           "request": {
             "method": "POST",
@@ -1415,6 +1581,10 @@
     },
     {
       "key": "operatorFileId",
+      "value": ""
+    },
+    {
+      "key": "myClaimId",
       "value": ""
     }
   ]

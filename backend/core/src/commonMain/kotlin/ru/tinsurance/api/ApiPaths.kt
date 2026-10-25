@@ -27,9 +27,12 @@ object OperatorApi {
     const val REFRESH = "$BASE/auth/refresh"
     const val LOGOUT = "$BASE/auth/logout"
     const val ME = "$BASE/me"
+    const val DIRECTIONS = "$BASE/directions"
     const val QUEUE = "$BASE/queue"
     const val CLAIM = "$BASE/claims/{id}"
     const val CLAIM_FILE_CONTENT = "$CLAIM/files/{fileId}/content"
+    const val CLAIM_DECISION_CONFIRM = "$CLAIM/decisions/confirm"
+    const val CLAIM_DECISION_OVERRIDE = "$CLAIM/decisions/override"
 }
 
 fun String.path(vararg params: Pair<String, Any>): String =

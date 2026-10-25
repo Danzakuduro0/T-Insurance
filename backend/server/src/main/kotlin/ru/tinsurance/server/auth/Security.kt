@@ -2,6 +2,7 @@ package ru.tinsurance.server.auth
 
 import ru.tinsurance.api.ErrorResponse
 import ru.tinsurance.api.Role
+import ru.tinsurance.server.claims.Actor
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -59,6 +60,8 @@ private fun JWTCredential.toPrincipal(allowed: Set<Role>): UserPrincipal? {
 
 private suspend fun ApplicationCall.respondUnauthorized() =
     respond(HttpStatusCode.Unauthorized, ErrorResponse("UNAUTHORIZED", "Требуется вход"))
+
+val UserPrincipal.actor get() = Actor.user(role, userId)
 
 val RoutingCall.user: UserPrincipal
     get() = principal<UserPrincipal>() ?: error("Маршрут не защищён authenticate()")
