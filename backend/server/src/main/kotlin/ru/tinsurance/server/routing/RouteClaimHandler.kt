@@ -1,25 +1,33 @@
 package ru.tinsurance.server.routing
 
-import ru.tinsurance.server.analysis.AnalysisConfig
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.jetbrains.exposed.v1.jdbc.select
+import ru.tinsurance.api.AnalysisStatus
 import ru.tinsurance.api.ClaimStatus
-import ru.tinsurance.server.claims.*
+import ru.tinsurance.api.FileStatus
+import ru.tinsurance.server.analysis.AnalysisConfig
+import ru.tinsurance.server.analysis.ImageAnalysisRepository
+import ru.tinsurance.server.claims.ClaimIntake
+import ru.tinsurance.server.claims.ClaimRepository
+import ru.tinsurance.server.claims.ClaimsConfig
+import ru.tinsurance.server.claims.CompletenessChecker
 import ru.tinsurance.server.common.tx
 import ru.tinsurance.server.db.ClaimFiles
 import ru.tinsurance.server.db.Claims
 import ru.tinsurance.server.db.DocumentTypes
 import ru.tinsurance.server.db.ImageAnalyses
 import ru.tinsurance.server.jobs.*
-import kotlinx.serialization.json.*
-import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
 import java.time.Duration
 import java.time.OffsetDateTime
 
 /**
- * Задача ROUTE_CLAIM — ставится, когда обращение переходит в IN_ANALYSIS.
- * Ждёт, пока проанализированы все фото (завершение анализа будит задачу), но не дольше maxWait:
- * если ML недоступен, обращение не застревает, а уходит оператору с пометкой (вопрос 22, раздел 6.5).
- * Дальше: фото отклонено как непригодное → запрос клиенту (NEEDS_INFO); иначе → очередь по правилам маршрутизации.
+ * Задача ROUTE_CLAIM — ставится, когда обращение переходит в IN_ANALYSIS. Ждёт анализ всех фото, но не дольше
+ * maxWait. Дальше: фото отклонено — запрос клиенту (NEEDS_INFO), иначе — очередь по правилам маршрутизации.
  */
 class RouteClaimHandler(
     private val db: Database,
@@ -31,55 +39,49 @@ class RouteClaimHandler(
 
     override suspend fun handle(job: Job): JobOutcome = db.tx {
         val claimId = job.long("claimId")
-        val claim = Claims.selectAll().where { Claims.id eq claimId }.forUpdate().singleOrNull()
-        if (claim == null || claim[Claims.status] != ClaimStatus.IN_ANALYSIS.name) return@tx JobOutcome.Done
+        val claim = ClaimRepository.findForUpdate(claimId)
+        if (claim == null || claim[Claims.status] != ClaimStatus.IN_ANALYSIS) return@tx JobOutcome.Done
 
         val photos = photos(claimId)
         val now = OffsetDateTime.now()
         val waited = Duration.between(claim[Claims.statusChangedAt], now)
-        if (photos.any { it.analysisStatus == "PENDING" } && waited < analysis.maxWait) {
+        if (photos.any { it.analysisStatus == AnalysisStatus.PENDING } && waited < analysis.maxWait) {
             return@tx JobOutcome.Later(analysis.routeRecheck)
         }
 
-        // Анализ отклонил фото как непригодное — клиенту запрос переснять (раздел 6.4: ADDITIONAL_DOCS)
         val completeness = CompletenessChecker.check(claim)
         if (!completeness.complete) {
             ClaimIntake.recordCompleteness(claimId, completeness, now)
             ClaimIntake.requestMaterials(claimId, ClaimStatus.IN_ANALYSIS, completeness, claims.infoRequestDueDays, now)
             return@tx JobOutcome.Done
         }
-
         val decision = RoutingRules.decide(RoutingInput(photos, duplicateClaimNumber(claim)), routing)
-        apply(claimId, decision, photos, now)
+        RoutingDecisionWriter.apply(claimId, decision, photos, now)
         JobOutcome.Done
     }
 
-    /** Повторы кончились из-за ошибок — не оставляем обращение в IN_ANALYSIS: отдаём оператору на ручную проверку. */
+    /** Повторы кончились из-за ошибок — обращение не остаётся в IN_ANALYSIS, а уходит на ручную проверку. */
     override suspend fun giveUp(job: Job, error: String) {
         db.tx {
             val claimId = job.long("claimId")
-            val claim = Claims.selectAll().where { Claims.id eq claimId }.forUpdate().singleOrNull() ?: return@tx
-            if (claim[Claims.status] != ClaimStatus.IN_ANALYSIS.name) return@tx
+            val claim = ClaimRepository.findForUpdate(claimId) ?: return@tx
+            if (claim[Claims.status] != ClaimStatus.IN_ANALYSIS) return@tx
             val decision = RoutingDecision(
                 direction = RoutingRules.MANUAL_REVIEW, priority = 2, manualReview = true,
                 reasons = listOf("Ошибка автоматической обработки — нужна ручная проверка"),
                 confidence = null, damageType = null,
             )
-            apply(claimId, decision, emptyList(), OffsetDateTime.now())
+            RoutingDecisionWriter.apply(claimId, decision, emptyList(), OffsetDateTime.now())
         }
     }
 
-    /** Принятые фото обращения (те, что анализируются) и последний результат анализа каждого. */
+    /** Принятые фото обращения и последний результат анализа каждого. */
     private fun photos(claimId: Long): List<PhotoAnalysis> {
         val files = ClaimFiles.join(DocumentTypes, JoinType.INNER, ClaimFiles.documentType, DocumentTypes.code)
             .select(ClaimFiles.id, ClaimFiles.analysisStatus)
-            .where { (ClaimFiles.claimId eq claimId) and (ClaimFiles.status eq "ACCEPTED") and (DocumentTypes.isImage eq true) }
+            .where { (ClaimFiles.claimId eq claimId) and (ClaimFiles.status eq FileStatus.ACCEPTED) and (DocumentTypes.isImage eq true) }
             .associate { it[ClaimFiles.id] to it[ClaimFiles.analysisStatus] }
-        if (files.isEmpty()) return emptyList()
-        val latest = ImageAnalyses.selectAll()
-            .where { ImageAnalyses.fileId inList files.keys }
-            .orderBy(ImageAnalyses.id to SortOrder.ASC)
-            .associateBy { it[ImageAnalyses.fileId] }
+        val latest = ImageAnalysisRepository.latestByFile(files.keys)
         return files.map { (fileId, status) ->
             val analysis = latest[fileId]
             PhotoAnalysis(fileId, status, analysis?.get(ImageAnalyses.damageType), analysis?.get(ImageAnalyses.damageConfidence))
@@ -90,57 +92,8 @@ class RouteClaimHandler(
         Claims.select(Claims.claimNumber).where { Claims.id eq other }.singleOrNull()?.get(Claims.claimNumber)
     }
 
-    private fun apply(claimId: Long, decision: RoutingDecision, photos: List<PhotoAnalysis>, at: OffsetDateTime) {
-        decision.damageType?.let { damage ->
-            ClaimDecisionWriter.setBySystem(
-                claimId, "DAMAGE",
-                value = buildJsonObject {
-                    put("damageType", damage)
-                    putJsonArray("photos") {
-                        photos.filter { it.damageType != null }.forEach { p ->
-                            addJsonObject { put("fileId", p.fileId); put("damageType", p.damageType); put("confidence", p.confidence) }
-                        }
-                    }
-                },
-                confidence = decision.confidence,
-                reason = "Модель: $damage",
-                ruleVersion = RoutingRules.VERSION, at = at,
-            )
-        }
-        ClaimDecisionWriter.setBySystem(
-            claimId, "ROUTING",
-            value = buildJsonObject {
-                put("direction", decision.direction)
-                put("manualReview", decision.manualReview)
-                putJsonArray("reasons") { decision.reasons.forEach { add(it) } }
-            },
-            confidence = decision.confidence,
-            reason = decision.reasons.joinToString("; "),
-            ruleVersion = RoutingRules.VERSION, at = at,
-        )
-        ClaimDecisionWriter.setBySystem(
-            claimId, "PRIORITY",
-            value = buildJsonObject { put("priority", decision.priority) },
-            confidence = null,
-            reason = if (decision.manualReview) "Ручная проверка — приоритет повышен" else "Обычный приоритет",
-            ruleVersion = RoutingRules.VERSION, at = at,
-        )
-        Claims.update({ Claims.id eq claimId }) {
-            it[directionCode] = decision.direction
-            it[priority] = decision.priority.toShort()
-            it[requiresManualReview] = decision.manualReview
-        }
-        ClaimStatusService.transition(
-            claimId, ClaimStatus.IN_ANALYSIS, ClaimStatus.QUEUED, Actor.SYSTEM,
-            reason = decision.reasons.joinToString("; "), at = at,
-        )
-    }
-
     companion object {
-        /**
-         * Обращения в IN_ANALYSIS без активной задачи ROUTE_CLAIM (например, после сбоя) получают новую.
-         * Запускается воркером периодически.
-         */
+        /** Обращения в IN_ANALYSIS без активной задачи (например, после сбоя) получают новую. */
         fun scheduleMissing(tx: JdbcTransaction) {
             tx.exec(
                 """

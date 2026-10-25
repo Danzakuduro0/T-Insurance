@@ -4,11 +4,9 @@ import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.ClaimStatus.*
 import ru.tinsurance.server.auth.PasswordHasher
 import ru.tinsurance.server.claims.Actor
-import ru.tinsurance.server.claims.ActorType
+import ru.tinsurance.api.*
 import ru.tinsurance.server.claims.ClaimStatusService
-import ru.tinsurance.server.common.AppMode
 import ru.tinsurance.server.db.*
-import io.ktor.server.config.ApplicationConfig
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
@@ -55,9 +53,9 @@ object DemoData {
             val ivan = client("Иван Петров", CLIENT_IVAN)
             val anna = client("Анна Смирнова", CLIENT_ANNA)
             val oleg = client("Олег Кузнецов", CLIENT_OLEG)
-            val op1 = staff("OPERATOR", "Мария Иванова", OPERATOR_1, listOf("STANDARD"))
-            val op2 = staff("OPERATOR", "Дмитрий Соколов", OPERATOR_2, listOf("STANDARD", "MANUAL_REVIEW"))
-            staff("ADMIN", "Администратор", ADMIN, emptyList())
+            val op1 = staff(Role.OPERATOR, "Мария Иванова", OPERATOR_1, listOf("STANDARD"))
+            val op2 = staff(Role.OPERATOR, "Дмитрий Соколов", OPERATOR_2, listOf("STANDARD", "MANUAL_REVIEW"))
+            staff(Role.ADMIN, "Администратор", ADMIN, emptyList())
 
             val ivanPolicy = policy(ivan, "KASKO-2026-000101", "KASKO", "Lada", "Vesta", 2021)
             val annaPolicy = policy(anna, "KASKO-2026-000102", "KASKO", "Kia", "Rio", 2019)
@@ -113,7 +111,7 @@ object DemoData {
         }
 
         private fun client(name: String, phone: String) = Users.insert {
-            it[role] = "CLIENT"
+            it[role] = Role.CLIENT
             it[fullName] = name
             it[Users.phone] = phone
             it[passwordHash] = this@Seeder.passwordHash
@@ -121,14 +119,14 @@ object DemoData {
             it[createdAt] = now.minusDays(30)
         }[Users.id]
 
-        private fun staff(role: String, name: String, email: String, directions: List<String>): Long {
+        private fun staff(role: Role, name: String, email: String, directions: List<String>): Long {
             val id = Users.insert {
                 it[Users.role] = role
                 it[fullName] = name
                 it[Users.email] = email
                 it[passwordHash] = this@Seeder.passwordHash
-                it[maxActiveClaims] = if (role == "OPERATOR") 10 else null
-                it[availability] = "ONLINE"
+                it[maxActiveClaims] = if (role == Role.OPERATOR) 10 else null
+                it[availability] = OperatorAvailability.ONLINE
                 it[isActive] = true
                 it[createdAt] = now.minusDays(30)
             }[Users.id]
@@ -197,14 +195,14 @@ object DemoData {
                 it[Claims.description] = description
                 it[contactPhone] = Users.select(Users.phone).where { Users.id eq clientId }.single()[Users.phone]
                 it[eventDetails] = buildJsonObject { circumstances?.let { c -> put("circumstances", c) } }
-                it[status] = DRAFT.name
+                it[status] = DRAFT
                 it[statusChangedAt] = created
                 it[requiresManualReview] = false
                 it[version] = 0
                 it[createdAt] = created
                 it[updatedAt] = created
             }[Claims.id]
-            ClaimStatusService.recordCreated(claimId, Actor(ActorType.CLIENT, clientId), created)
+            ClaimStatusService.recordCreated(claimId, Actor.client(clientId), created)
 
             files.forEach { (type, count) -> repeat(count) { file(claimId, clientId, type, created) } }
 
@@ -230,7 +228,7 @@ object DemoData {
             for (to in path) {
                 val t = next()
                 val actor = when (to) {
-                    SUBMITTED -> Actor(ActorType.CLIENT, clientId)
+                    SUBMITTED -> Actor.client(clientId)
                     ASSIGNED, IN_REVIEW, COMPLETED -> Actor(ActorType.OPERATOR, operator)
                     else -> Actor.SYSTEM
                 }
@@ -261,7 +259,7 @@ object DemoData {
                 ClaimComments.insert {
                     it[ClaimComments.claimId] = claimId
                     it[authorId] = operator!!
-                    it[visibility] = "INTERNAL"
+                    it[visibility] = CommentVisibility.INTERNAL
                     it[body] = note
                     it[createdAt] = next()
                 }
@@ -280,7 +278,7 @@ object DemoData {
                 it[mimeType] = if (isPdf) "application/pdf" else "image/jpeg"
                 it[sizeBytes] = 250_000L + n * 1_000
                 it[sha256] = "demo".padEnd(60, '0') + n.toString().padStart(4, '0')
-                it[status] = "ACCEPTED"
+                it[status] = FileStatus.ACCEPTED
                 it[uploadedBy] = clientId
                 it[uploadedAt] = created.plusMinutes(5)
             }
@@ -289,9 +287,9 @@ object DemoData {
         private fun requestMissing(claimId: Long, missing: List<String>, at: OffsetDateTime) {
             val requestId = InfoRequests.insert {
                 it[InfoRequests.claimId] = claimId
-                it[requestSource] = "SYSTEM"
+                it[requestSource] = ActorType.SYSTEM
                 it[message] = "Для рассмотрения обращения загрузите недостающие документы"
-                it[status] = "OPEN"
+                it[status] = InfoRequestStatus.OPEN
                 it[dueAt] = at.plusDays(7)
                 it[createdAt] = at
             }[InfoRequests.id]
@@ -303,19 +301,19 @@ object DemoData {
                     it[isFulfilled] = false
                 }
             }
-            decision(claimId, "COMPLETENESS", buildJsonObject {
+            decision(claimId, DecisionKind.COMPLETENESS, buildJsonObject {
                 put("complete", false)
                 putJsonArray("missingDocuments") { missing.forEach { add(buildJsonObject { put("documentType", it) }) } }
             }, null, "Не хватает: ${missing.joinToString()}", at)
         }
 
         private fun applyRouting(claimId: Long, r: Routing, at: OffsetDateTime) {
-            decision(claimId, "COMPLETENESS", buildJsonObject { put("complete", true) }, null, "Комплект полный", at)
-            decision(claimId, "DAMAGE", buildJsonObject { put("damageType", r.damage) }, r.confidence,
+            decision(claimId, DecisionKind.COMPLETENESS, buildJsonObject { put("complete", true) }, null, "Комплект полный", at)
+            decision(claimId, DecisionKind.DAMAGE, buildJsonObject { put("damageType", r.damage) }, r.confidence,
                 "Модель: ${r.damage} (${(r.confidence * 100).toInt()}%)", at)
-            decision(claimId, "ROUTING", buildJsonObject { put("direction", r.direction) }, r.confidence,
+            decision(claimId, DecisionKind.ROUTING, buildJsonObject { put("direction", r.direction) }, r.confidence,
                 if (r.manual) "Уверенность модели ниже порога 0.6 — ручная проверка" else "Тип события и вид повреждения", at)
-            decision(claimId, "PRIORITY", buildJsonObject { put("priority", r.priority) }, null, "Правила срочности", at)
+            decision(claimId, DecisionKind.PRIORITY, buildJsonObject { put("priority", r.priority) }, null, "Правила срочности", at)
             Claims.update({ Claims.id eq claimId }) {
                 it[directionCode] = r.direction
                 it[priority] = r.priority.toShort()
@@ -325,14 +323,14 @@ object DemoData {
 
         private fun overridePriority(claimId: Long, priority: Int, reason: String, operatorId: Long, at: OffsetDateTime) {
             val original = ClaimDecisions.selectAll()
-                .where { (ClaimDecisions.claimId eq claimId) and (ClaimDecisions.kind eq "PRIORITY") and (ClaimDecisions.isCurrent eq true) }
+                .where { (ClaimDecisions.claimId eq claimId) and (ClaimDecisions.kind eq DecisionKind.PRIORITY) and (ClaimDecisions.isCurrent eq true) }
                 .single()[ClaimDecisions.id]
             ClaimDecisions.update({ ClaimDecisions.id eq original }) { it[isCurrent] = false }
             ClaimDecisions.insert {
                 it[ClaimDecisions.claimId] = claimId
-                it[kind] = "PRIORITY"
-                it[decisionSource] = "OPERATOR"
-                it[action] = "OVERRIDE"
+                it[kind] = DecisionKind.PRIORITY
+                it[decisionSource] = DecisionSource.OPERATOR
+                it[action] = DecisionAction.OVERRIDE
                 it[value] = buildJsonObject { put("priority", priority) }
                 it[ClaimDecisions.reason] = reason
                 it[supersedesId] = original
@@ -343,11 +341,11 @@ object DemoData {
             Claims.update({ Claims.id eq claimId }) { it[Claims.priority] = priority.toShort() }
         }
 
-        private fun decision(claimId: Long, kind: String, value: JsonObject, confidence: Float?, reason: String, at: OffsetDateTime) {
+        private fun decision(claimId: Long, kind: DecisionKind, value: JsonObject, confidence: Float?, reason: String, at: OffsetDateTime) {
             ClaimDecisions.insert {
                 it[ClaimDecisions.claimId] = claimId
                 it[ClaimDecisions.kind] = kind
-                it[decisionSource] = "SYSTEM"
+                it[decisionSource] = DecisionSource.SYSTEM
                 it[ClaimDecisions.value] = value
                 it[ClaimDecisions.confidence] = confidence
                 it[ClaimDecisions.reason] = reason
@@ -356,23 +354,5 @@ object DemoData {
                 it[createdAt] = at
             }
         }
-    }
-}
-
-/** Нужно ли создавать демо-данные и с каким паролем. null — не создавать. */
-object DemoSettings {
-    private const val MIN_PROD_PASSWORD_LENGTH = 10
-
-    fun demoPassword(config: ApplicationConfig, mode: AppMode): String? {
-        val dev = mode == AppMode.DEV
-        val seed = config.propertyOrNull("demo.seed")?.getString()?.trim()?.takeIf { it.isNotEmpty() }?.toBoolean() ?: dev
-        if (!seed) return null
-        val password = config.propertyOrNull("demo.password")?.getString()?.takeIf { it.isNotBlank() }
-        if (dev) return password ?: DemoData.DEV_DEMO_PASSWORD
-        require(password != null) { "DEMO_SEED=true в режиме prod требует DEMO_PASSWORD" }
-        require(password.length >= MIN_PROD_PASSWORD_LENGTH && password != DemoData.DEV_DEMO_PASSWORD) {
-            "DEMO_PASSWORD в режиме prod: не короче $MIN_PROD_PASSWORD_LENGTH символов и не dev-пароль"
-        }
-        return password
     }
 }

@@ -1,15 +1,19 @@
 package ru.tinsurance.server.auth
 
-import ru.tinsurance.api.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.jdbc.Database
+import ru.tinsurance.api.AuthResponse
+import ru.tinsurance.api.MobileLoginRequest
+import ru.tinsurance.api.OperatorLoginRequest
+import ru.tinsurance.api.UserDto
 import ru.tinsurance.server.common.UnauthorizedException
 import ru.tinsurance.server.common.ValidationException
 import ru.tinsurance.server.common.normalizePhone
 import ru.tinsurance.server.common.tx
 import ru.tinsurance.server.db.AuthSessions
-import ru.tinsurance.server.db.UserDevices
 import ru.tinsurance.server.db.Users
-import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
+import ru.tinsurance.server.users.UserRepository
+import ru.tinsurance.server.users.toUserDto
 import java.time.OffsetDateTime
 
 class AuthService(
@@ -21,154 +25,76 @@ class AuthService(
     suspend fun loginMobile(request: MobileLoginRequest, userAgent: String?): AuthResponse {
         if (request.device.installationId.isBlank()) throw ValidationException("Не указан installationId устройства")
         val phone = normalizePhone(request.phone)
-        val throttleKey = "MOBILE:$phone"
-        throttle.checkAllowed(throttleKey)
-        return db.tx {
-            val user = Users.selectAll()
-                .where { (Users.phone eq phone) and (Users.role eq Role.CLIENT.name) and (Users.isActive eq true) }
-                .singleOrNull()
-            if (!PasswordHasher.verify(request.password, user?.get(Users.passwordHash))) {
-                throttle.onFailure(throttleKey)
-                throw UnauthorizedException("Неверный телефон или пароль")
+        return withThrottle("MOBILE:$phone") {
+            db.tx {
+                val user = verified(UserRepository.findActiveClientByPhone(phone), request.password, "Неверный телефон или пароль")
+                val deviceId = DeviceRepository.upsert(user[Users.id], request.device, OffsetDateTime.now())
+                startSession(user, Channel.MOBILE, deviceId, userAgent)
             }
-            throttle.onSuccess(throttleKey)
-            val deviceId = upsertDevice(user!![Users.id], request.device)
-            startSession(user, Channel.MOBILE, deviceId, userAgent)
         }
     }
 
     suspend fun loginOperator(request: OperatorLoginRequest, userAgent: String?): AuthResponse {
         val email = request.email.trim().lowercase()
-        val throttleKey = "WEB:$email"
-        throttle.checkAllowed(throttleKey)
-        return db.tx {
-            val user = Users.selectAll()
-                .where {
-                    (Users.email.lowerCase() eq email) and
-                        (Users.role inList listOf(Role.OPERATOR.name, Role.ADMIN.name)) and
-                        (Users.isActive eq true)
-                }
-                .singleOrNull()
-            if (!PasswordHasher.verify(request.password, user?.get(Users.passwordHash))) {
-                throttle.onFailure(throttleKey)
-                throw UnauthorizedException("Неверный email или пароль")
+        return withThrottle("WEB:$email") {
+            db.tx {
+                val user = verified(UserRepository.findActiveStaffByEmail(email), request.password, "Неверный email или пароль")
+                startSession(user, Channel.WEB, deviceId = null, userAgent)
             }
-            throttle.onSuccess(throttleKey)
-            startSession(user!!, Channel.WEB, deviceId = null, userAgent)
         }
     }
 
     /** Ротация: старый refresh-токен отзывается, выдаётся новая пара. */
     suspend fun refresh(refreshToken: String, channel: Channel, userAgent: String?): AuthResponse = db.tx {
         val now = OffsetDateTime.now()
-        val session = AuthSessions.selectAll()
-            .where {
-                (AuthSessions.refreshTokenHash eq tokens.hash(refreshToken)) and
-                    (AuthSessions.clientType eq channel.clientType) and
-                    AuthSessions.revokedAt.isNull() and
-                    (AuthSessions.expiresAt greater now)
-            }
-            .forUpdate()
-            .singleOrNull() ?: throw UnauthorizedException("Сессия истекла, войдите заново")
-
-        val user = Users.selectAll()
-            .where { (Users.id eq session[AuthSessions.userId]) and (Users.isActive eq true) }
-            .singleOrNull() ?: throw UnauthorizedException("Пользователь заблокирован")
-
-        AuthSessions.update({ AuthSessions.id eq session[AuthSessions.id] }) {
-            it[revokedAt] = now
-            it[lastUsedAt] = now
-        }
+        val session = SessionRepository.findActiveForUpdate(tokens.hash(refreshToken), channel, now)
+            ?: throw UnauthorizedException("Сессия истекла, войдите заново")
+        val user = UserRepository.findActive(session[AuthSessions.userId])
+            ?: throw UnauthorizedException("Пользователь заблокирован")
+        SessionRepository.revoke(session[AuthSessions.id], now)
         startSession(user, channel, session[AuthSessions.deviceId], userAgent)
     }
 
-    suspend fun logout(sessionId: Long) = db.tx {
-        AuthSessions.update({ (AuthSessions.id eq sessionId) and AuthSessions.revokedAt.isNull() }) {
-            it[revokedAt] = OffsetDateTime.now()
-        }
-    }
+    suspend fun logout(sessionId: Long) = db.tx { SessionRepository.revoke(sessionId, OffsetDateTime.now()) }
 
-    /**
-     * Действует ли сессия, к которой выдан access-токен. После выхода, смены refresh-токена или блокировки
-     * пользователя — нет: токен перестаёт работать сразу, не дожидаясь конца своих 15 минут.
-     */
+    /** После выхода, смены refresh-токена или блокировки access-токен перестаёт работать сразу. */
     suspend fun isSessionActive(principal: UserPrincipal): Boolean = db.tx {
-        AuthSessions.join(Users, JoinType.INNER, AuthSessions.userId, Users.id)
-            .select(AuthSessions.id)
-            .where {
-                (AuthSessions.id eq principal.sessionId) and (AuthSessions.userId eq principal.userId) and
-                    AuthSessions.revokedAt.isNull() and (AuthSessions.expiresAt greater OffsetDateTime.now()) and
-                    (Users.isActive eq true)
-            }
-            .any()
+        SessionRepository.isActive(principal.sessionId, principal.userId, OffsetDateTime.now())
     }
 
-    suspend fun me(userId: Long): UserDto = db.tx {
-        Users.selectAll().where { Users.id eq userId }.single().toUserDto()
+    suspend fun me(userId: Long): UserDto = db.tx { UserRepository.get(userId) }
+
+    private suspend fun <T> withThrottle(key: String, block: suspend () -> T): T {
+        throttle.checkAllowed(key)
+        val result = try {
+            block()
+        } catch (e: UnauthorizedException) {
+            throttle.onFailure(key)
+            throw e
+        }
+        throttle.onSuccess(key)
+        return result
     }
 
-    private fun upsertDevice(userId: Long, device: DeviceInfo): Long {
-        val now = OffsetDateTime.now()
-        // push-токен принадлежит одному устройству: если он был у другой записи — снимаем его там
-        device.pushToken?.let { token ->
-            UserDevices.update({ UserDevices.pushToken eq token }) { it[pushToken] = null }
-        }
-        val existing = UserDevices.selectAll()
-            .where { (UserDevices.userId eq userId) and (UserDevices.installationId eq device.installationId) }
-            .singleOrNull()
-        return if (existing != null) {
-            UserDevices.update({ UserDevices.id eq existing[UserDevices.id] }) {
-                it[platform] = device.platform.name
-                it[pushToken] = device.pushToken
-                it[appVersion] = device.appVersion
-                it[osVersion] = device.osVersion
-                it[isActive] = true
-                it[lastSeenAt] = now
-            }
-            existing[UserDevices.id]
-        } else {
-            UserDevices.insert {
-                it[UserDevices.userId] = userId
-                it[installationId] = device.installationId
-                it[platform] = device.platform.name
-                it[pushToken] = device.pushToken
-                it[appVersion] = device.appVersion
-                it[osVersion] = device.osVersion
-                it[isActive] = true
-                it[createdAt] = now
-                it[lastSeenAt] = now
-            }[UserDevices.id]
-        }
+    /** Несуществующий пользователь проверяется так же долго, как существующий. */
+    private fun verified(user: ResultRow?, password: String, error: String): ResultRow {
+        if (!PasswordHasher.verify(password, user?.get(Users.passwordHash))) throw UnauthorizedException(error)
+        return user!!
     }
 
     private fun startSession(user: ResultRow, channel: Channel, deviceId: Long?, userAgent: String?): AuthResponse {
         val now = OffsetDateTime.now()
         val refreshToken = tokens.newRefreshToken()
-        val sessionId = AuthSessions.insert {
-            it[userId] = user[Users.id]
-            it[clientType] = channel.clientType
-            it[AuthSessions.deviceId] = deviceId
-            it[refreshTokenHash] = tokens.hash(refreshToken)
-            it[AuthSessions.userAgent] = userAgent?.take(500)
-            it[createdAt] = now
-            it[lastUsedAt] = now
-            it[expiresAt] = now.plus(tokens.config.refreshTtl(channel))
-        }[AuthSessions.id]
-        Users.update({ Users.id eq user[Users.id] }) { it[lastSeenAt] = now }
-
+        val sessionId = SessionRepository.create(
+            user[Users.id], channel, deviceId, tokens.hash(refreshToken), userAgent,
+            expiresAt = now.plus(tokens.config.refreshTtl(channel)), at = now,
+        )
+        UserRepository.touchLastSeen(user[Users.id], now)
         return AuthResponse(
-            accessToken = tokens.accessToken(user[Users.id], user[Users.role], sessionId, channel),
+            accessToken = tokens.accessToken(user[Users.id], user[Users.role].name, sessionId, channel),
             accessTokenExpiresIn = tokens.config.accessTokenTtl.seconds,
             refreshToken = refreshToken,
             user = user.toUserDto(),
         )
     }
 }
-
-fun ResultRow.toUserDto() = UserDto(
-    id = this[Users.id],
-    role = Role.valueOf(this[Users.role]),
-    fullName = this[Users.fullName],
-    phone = this[Users.phone],
-    email = this[Users.email],
-)

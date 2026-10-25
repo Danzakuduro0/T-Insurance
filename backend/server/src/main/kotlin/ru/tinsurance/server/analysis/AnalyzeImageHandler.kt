@@ -1,32 +1,34 @@
 package ru.tinsurance.server.analysis
 
-import ru.tinsurance.api.ClaimStatus
-import ru.tinsurance.server.claims.ActorType
-import ru.tinsurance.server.common.tx
-import ru.tinsurance.server.db.AuditLog
-import ru.tinsurance.server.db.ClaimFiles
-import ru.tinsurance.server.db.Claims
-import ru.tinsurance.server.db.ImageAnalyses
-import ru.tinsurance.server.jobs.*
-import ru.tinsurance.server.files.Rejection
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.add
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import ru.tinsurance.api.AnalysisStatus
+import ru.tinsurance.api.ClaimStatus
+import ru.tinsurance.api.FileStatus
+import ru.tinsurance.api.RejectionReason
+import ru.tinsurance.server.claims.Actor
+import ru.tinsurance.server.claims.AuditEntity
+import ru.tinsurance.server.claims.AuditWriter
+import ru.tinsurance.server.claims.ClaimRepository
+import ru.tinsurance.server.common.tx
+import ru.tinsurance.server.db.ClaimFiles
+import ru.tinsurance.server.db.Claims
+import ru.tinsurance.server.jobs.*
 import java.time.OffsetDateTime
 
 /**
  * Задача ANALYZE_IMAGE: фото → ML-сервис (или локальная проверка) → image_analyses.
- * Непригодное фото, пока клиент ещё может его заменить, отклоняется с подсказкой (вопрос 22).
- * Если анализ так и не удался — analysis_status FAILED, обращение уходит оператору без него (вопрос 22, раздел 6.5).
+ * Непригодное фото, пока клиент может его заменить, отклоняется с подсказкой.
+ * Если анализ так и не удался — FAILED, и обращение уходит оператору без него.
  */
 class AnalyzeImageHandler(
     private val db: Database,
@@ -35,13 +37,12 @@ class AnalyzeImageHandler(
 ) : JobHandler {
     override val type = JobType.ANALYZE_IMAGE
 
-    private class Target(val request: AnalysisRequest, val fileStatus: String, val analysisStatus: String)
+    private class Target(val request: AnalysisRequest, val fileStatus: FileStatus, val analysisStatus: AnalysisStatus)
 
     override suspend fun handle(job: Job): JobOutcome {
-        val fileId = job.long("fileId")
-        val target = db.tx { load(fileId) } ?: return JobOutcome.Done
-        // файл заменили или уже проанализировали — анализ не нужен
-        if (target.fileStatus != "ACCEPTED" || target.analysisStatus != "PENDING") return JobOutcome.Done
+        val target = db.tx { load(job.long("fileId")) } ?: return JobOutcome.Done
+        // файл заменили или уже проанализировали
+        if (target.fileStatus != FileStatus.ACCEPTED || target.analysisStatus != AnalysisStatus.PENDING) return JobOutcome.Done
 
         val result = try {
             analyzer.analyze(target.request)
@@ -59,10 +60,8 @@ class AnalyzeImageHandler(
         db.tx {
             val claimId = ClaimFiles.select(ClaimFiles.claimId).where { ClaimFiles.id eq fileId }.singleOrNull()?.get(ClaimFiles.claimId)
                 ?: return@tx
-            ClaimFiles.update({ (ClaimFiles.id eq fileId) and (ClaimFiles.analysisStatus eq "PENDING") }) {
-                it[analysisStatus] = "FAILED"
-            }
-            audit(claimId, fileId, "ANALYSIS_FAILED", buildJsonObject { put("error", error.take(300)) })
+            setAnalysisStatus(fileId, AnalysisStatus.FAILED)
+            AuditWriter.record(claimId, AuditEntity.FILE, fileId, "ANALYSIS_FAILED", Actor.SYSTEM, buildJsonObject { put("error", error.take(300)) })
             JobQueue.wakeUp(this, JobType.ROUTE_CLAIM, "claimId", claimId)
         }
     }
@@ -74,71 +73,35 @@ class AnalyzeImageHandler(
             .singleOrNull()
             ?.let {
                 Target(
-                    request = AnalysisRequest(
-                        fileId = fileId,
-                        claimId = it[ClaimFiles.claimId],
-                        storageKey = it[ClaimFiles.storageKey],
-                        documentType = it[ClaimFiles.documentType],
-                        eventType = it[Claims.eventType],
-                    ),
+                    request = AnalysisRequest(fileId, it[ClaimFiles.claimId], it[ClaimFiles.storageKey], it[ClaimFiles.documentType], it[Claims.eventType]),
                     fileStatus = it[ClaimFiles.status],
                     analysisStatus = it[ClaimFiles.analysisStatus],
                 )
             }
 
     private fun org.jetbrains.exposed.v1.jdbc.JdbcTransaction.save(request: AnalysisRequest, result: AnalysisResult) {
-        val now = OffsetDateTime.now()
-        ImageAnalyses.insert {
-            it[fileId] = request.fileId
-            it[modelVersion] = result.modelVersion
-            it[qualityOk] = result.qualityAcceptable
-            it[qualityScore] = result.qualityScore
-            it[qualityIssues] = result.qualityIssues
-            it[damageType] = result.damageType
-            it[damageConfidence] = result.damageConfidence
-            // вопрос 19: обязательный минимум — видна ли область повреждения
-            it[damageDetected] = when {
-                "NO_DAMAGE_VISIBLE" in result.qualityIssues -> false
-                result.damageType != null -> true
-                else -> null
-            }
-            it[carPart] = result.carPart
-            it[damageArea] = result.damageArea
-            it[rawResult] = result.raw
-            it[createdAt] = now
-        }
-        ClaimFiles.update({ (ClaimFiles.id eq request.fileId) and (ClaimFiles.analysisStatus eq "PENDING") }) {
-            it[analysisStatus] = "DONE"
-        }
-
-        val claimStatus = ClaimStatus.valueOf(
-            Claims.select(Claims.status).where { Claims.id eq request.claimId }.single()[Claims.status]
-        )
-        // Пока клиент может заменить фото, непригодное отклоняется с подсказкой. Если обращение уже у оператора —
-        // результат только показывается в карточке, решение за человеком.
-        if (!result.qualityAcceptable && claimStatus in REPLACEABLE) {
-            ClaimFiles.update({ (ClaimFiles.id eq request.fileId) and (ClaimFiles.status eq "ACCEPTED") }) {
-                it[status] = "REJECTED"
-                it[rejectionReason] = Rejection.LOW_QUALITY.name
-            }
-            audit(request.claimId, request.fileId, "FILE_REJECTED", buildJsonObject {
-                put("reason", Rejection.LOW_QUALITY.name)
-                putJsonArray("issues") { result.qualityIssues.forEach { add(it) } }
-                put("modelVersion", result.modelVersion)
-            })
-        }
+        ImageAnalysisRepository.insert(request.fileId, result, OffsetDateTime.now())
+        setAnalysisStatus(request.fileId, AnalysisStatus.DONE)
+        // пока клиент может заменить фото, непригодное отклоняется; у оператора — только показывается в карточке
+        if (!result.qualityAcceptable && ClaimRepository.status(request.claimId) in REPLACEABLE) reject(request, result)
         JobQueue.wakeUp(this, JobType.ROUTE_CLAIM, "claimId", request.claimId)
     }
 
-    private fun audit(claimId: Long, fileId: Long, action: String, value: kotlinx.serialization.json.JsonObject) {
-        AuditLog.insert {
-            it[AuditLog.claimId] = claimId
-            it[entityType] = "FILE"
-            it[entityId] = fileId
-            it[AuditLog.action] = action
-            it[newValue] = value
-            it[actorType] = ActorType.SYSTEM.name
-            it[createdAt] = OffsetDateTime.now()
+    private fun reject(request: AnalysisRequest, result: AnalysisResult) {
+        ClaimFiles.update({ (ClaimFiles.id eq request.fileId) and (ClaimFiles.status eq FileStatus.ACCEPTED) }) {
+            it[status] = FileStatus.REJECTED
+            it[rejectionReason] = RejectionReason.LOW_QUALITY
+        }
+        AuditWriter.record(request.claimId, AuditEntity.FILE, request.fileId, "FILE_REJECTED", Actor.SYSTEM, buildJsonObject {
+            put("reason", RejectionReason.LOW_QUALITY.name)
+            putJsonArray("issues") { result.qualityIssues.forEach { add(it) } }
+            put("modelVersion", result.modelVersion)
+        })
+    }
+
+    private fun setAnalysisStatus(fileId: Long, status: AnalysisStatus) {
+        ClaimFiles.update({ (ClaimFiles.id eq fileId) and (ClaimFiles.analysisStatus eq AnalysisStatus.PENDING) }) {
+            it[analysisStatus] = status
         }
     }
 

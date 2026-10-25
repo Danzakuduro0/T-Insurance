@@ -1,52 +1,36 @@
 package ru.tinsurance.server.routing
 
-import io.ktor.server.config.*
-
-data class RoutingConfig(
-    /** раздел 6.4: уверенность модели ниже порога — ручная проверка; значение обосновывает ML-инженер (вопрос 24) */
-    val confidenceThreshold: Float,
-) {
-    companion object {
-        fun from(config: ApplicationConfig) = RoutingConfig(
-            confidenceThreshold = config.propertyOrNull("routing.confidenceThreshold")?.getString()?.toFloat() ?: 0.65f,
-        )
-    }
-}
+import ru.tinsurance.api.AnalysisStatus
 
 /** Анализ одного фото на момент маршрутизации. */
 data class PhotoAnalysis(
     val fileId: Long,
-    /** DONE, FAILED или PENDING (не дождались) */
-    val analysisStatus: String,
+    val analysisStatus: AnalysisStatus,
     val damageType: String? = null,
     val confidence: Float? = null,
 )
 
 data class RoutingInput(
     val photos: List<PhotoAnalysis>,
-    /** номер обращения, в котором уже встречалось фото (вопрос 17) */
+    /** Номер обращения, в котором уже встречалось фото. */
     val duplicateOfClaimNumber: String?,
 )
 
 data class RoutingDecision(
-    /** STANDARD или MANUAL_REVIEW (справочник directions) */
+    /** STANDARD или MANUAL_REVIEW (справочник directions). */
     val direction: String,
-    /** 1 — обычный, 2 — повышенный */
+    /** 1 — обычный, 2 — повышенный. */
     val priority: Int,
     val manualReview: Boolean,
-    /** сработавшие правила — показываются оператору вместо «чёрного ящика» (вопрос 23) */
+    /** Сработавшие правила — оператор видит, почему принято решение. */
     val reasons: List<String>,
-    /** наименьшая уверенность модели по фото */
+    /** Наименьшая уверенность модели по фото. */
     val confidence: Float?,
-    /** вид повреждения с наибольшей уверенностью */
+    /** Вид повреждения с наибольшей уверенностью. */
     val damageType: String?,
 )
 
-/**
- * Куда отправить обращение после анализа фото (раздел 6.4). Чистая функция: правила легко объяснить и проверить.
- * Нехватка материалов и непригодные фото обрабатываются раньше — запросом клиенту (NEEDS_INFO).
- * Подтверждение и исправление решения оператором — шаг 4.
- */
+/** Куда отправить обращение после анализа фото. Чистая функция: правила легко объяснить и проверить. */
 object RoutingRules {
     const val VERSION = "routing-v1"
     const val STANDARD = "STANDARD"
@@ -56,10 +40,10 @@ object RoutingRules {
         val threshold = config.confidenceThreshold
         val reasons = mutableListOf<String>()
 
-        val notAnalyzed = input.photos.filter { it.analysisStatus != "DONE" }
+        val notAnalyzed = input.photos.filter { it.analysisStatus != AnalysisStatus.DONE }
         if (notAnalyzed.isNotEmpty()) reasons += "Автоматический анализ недоступен для ${notAnalyzed.size} фото"
 
-        val analyzed = input.photos.filter { it.analysisStatus == "DONE" }
+        val analyzed = input.photos.filter { it.analysisStatus == AnalysisStatus.DONE }
         val unclassified = analyzed.filter { it.damageType == null || it.confidence == null }
         if (unclassified.isNotEmpty()) reasons += "Вид повреждения не определён на ${unclassified.size} фото"
 
@@ -77,7 +61,6 @@ object RoutingRules {
         }
         return RoutingDecision(
             direction = if (manual) MANUAL_REVIEW else STANDARD,
-            // раздел 6.4: ручная проверка — приоритет повышается
             priority = if (manual) 2 else 1,
             manualReview = manual,
             reasons = reasons,

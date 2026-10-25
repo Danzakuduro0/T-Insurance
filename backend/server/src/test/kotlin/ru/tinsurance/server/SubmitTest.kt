@@ -1,6 +1,8 @@
 package ru.tinsurance.server
 
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.*
+import ru.tinsurance.api.operator.*
 import ru.tinsurance.server.demo.DemoData
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -93,7 +95,7 @@ class SubmitTest {
 
         val request = result.openInfoRequest!!
         assertEquals(
-            listOf(Triple("DAMAGE_PHOTO", 1, "MISSING")),
+            listOf(Triple("DAMAGE_PHOTO", 1, MaterialIssue.MISSING)),
             request.items.filter { it.documentType != null }.map { Triple(it.documentType, it.minCount, it.issue) },
         )
         assertEquals(listOf("eventLocation", "description"), request.items.mapNotNull { it.fieldName })

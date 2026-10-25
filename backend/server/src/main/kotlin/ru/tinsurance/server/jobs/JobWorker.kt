@@ -1,6 +1,6 @@
 package ru.tinsurance.server.jobs
 
-import ru.tinsurance.server.common.tx
+import ru.tinsurance.server.common.*
 import io.ktor.server.config.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
@@ -31,12 +31,12 @@ data class WorkerConfig(
 ) {
     companion object {
         fun from(config: ApplicationConfig) = WorkerConfig(
-            enabled = config.propertyOrNull("jobs.enabled")?.getString()?.toBoolean() ?: true,
-            pollInterval = Duration.ofMillis(config.propertyOrNull("jobs.pollIntervalMs")?.getString()?.toLong() ?: 1000),
-            batchSize = config.propertyOrNull("jobs.batchSize")?.getString()?.toInt() ?: 10,
-            concurrency = config.propertyOrNull("jobs.concurrency")?.getString()?.toInt() ?: 4,
-            lease = Duration.ofSeconds(config.propertyOrNull("jobs.leaseSeconds")?.getString()?.toLong() ?: 300),
-            maintenanceInterval = Duration.ofSeconds(config.propertyOrNull("jobs.maintenanceSeconds")?.getString()?.toLong() ?: 60),
+            enabled = config.boolean("jobs.enabled", true),
+            pollInterval = config.millis("jobs.pollIntervalMs", 1000),
+            batchSize = config.int("jobs.batchSize", 10),
+            concurrency = config.int("jobs.concurrency", 4),
+            lease = config.seconds("jobs.leaseSeconds", 300),
+            maintenanceInterval = config.seconds("jobs.maintenanceSeconds", 60),
         )
     }
 }

@@ -15,10 +15,10 @@ import java.time.Instant
 import java.util.Base64
 import java.util.Date
 
-/** Откуда вход: у каждого канала своя аудитория JWT и свой срок жизни сессии. */
-enum class Channel(val clientType: String, val audience: String) {
-    MOBILE("MOBILE", "tstrah-mobile"),
-    WEB("WEB", "tstrah-operator"),
+/** Откуда вход: у каждого канала своя аудитория JWT, провайдер аутентификации и срок жизни сессии. */
+enum class Channel(val clientType: String, val audience: String, val authProvider: String) {
+    MOBILE("MOBILE", "tstrah-mobile", AUTH_MOBILE),
+    WEB("WEB", "tstrah-operator", AUTH_OPERATOR),
 }
 
 data class JwtConfig(
@@ -33,10 +33,7 @@ data class JwtConfig(
     companion object {
         private const val MIN_SECRET_LENGTH = 32
 
-        /**
-         * PROD: без JWT_SECRET сервер не стартует — секрета по умолчанию в репозитории больше нет.
-         * DEV: если секрет не задан, генерируется случайный на время запуска (после перезапуска нужно войти заново).
-         */
+        /** PROD: без JWT_SECRET сервер не стартует. DEV: без секрета — случайный до перезапуска. */
         fun from(config: ApplicationConfig, mode: AppMode): JwtConfig {
             val secret = config.stringOrNull("jwt.secret") ?: when (mode) {
                 AppMode.PROD -> error("JWT_SECRET не задан. В режиме prod он обязателен (не короче $MIN_SECRET_LENGTH символов)")

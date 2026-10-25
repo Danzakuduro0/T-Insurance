@@ -1,8 +1,8 @@
 package ru.tinsurance.server
 
-import ru.tinsurance.server.operator.ClaimCard
-import ru.tinsurance.server.operator.Page
-import ru.tinsurance.server.operator.QueueItem
+import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.operator.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -16,7 +16,7 @@ class OperatorApiTest {
         val page = client.get("/api/operator/queue?status=QUEUED") { bearerAuth(token) }.body<Page<QueueItem>>()
 
         assertTrue(page.items.isNotEmpty())
-        assertTrue(page.items.all { it.status == "QUEUED" })
+        assertTrue(page.items.all { it.status == ClaimStatus.QUEUED })
         val priorities = page.items.map { it.priority ?: 0 }
         assertEquals(priorities.sortedDescending(), priorities)
         // первым — сомнительный случай: высокий приоритет, ручная проверка, просрочен SLA
@@ -24,14 +24,14 @@ class OperatorApiTest {
         assertTrue(page.items.first().isOverdue)
 
         val all = client.get("/api/operator/queue?limit=200") { bearerAuth(token) }.body<Page<QueueItem>>()
-        assertTrue(all.items.none { it.status == "DRAFT" })
+        assertTrue(all.items.none { it.status == ClaimStatus.DRAFT })
     }
 
     @Test
     fun queueFilters() = apiTest { client ->
         val token = client.loginOperator().accessToken
         val mine = client.get("/api/operator/queue?assigned=me") { bearerAuth(token) }.body<Page<QueueItem>>()
-        assertEquals(listOf("IN_REVIEW"), mine.items.map { it.status })
+        assertEquals(listOf(ClaimStatus.IN_REVIEW), mine.items.map { it.status })
 
         val standard = client.get("/api/operator/queue?direction=STANDARD") { bearerAuth(token) }.body<Page<QueueItem>>()
         assertTrue(standard.items.isNotEmpty() && standard.items.all { it.directionCode == "STANDARD" })
@@ -76,13 +76,13 @@ class OperatorApiTest {
         val inReview = client.get("/api/operator/queue?assigned=me") { bearerAuth(token) }.body<Page<QueueItem>>().items.single()
 
         val card = client.get("/api/operator/claims/${inReview.id}") { bearerAuth(token) }.body<ClaimCard>()
-        val priority = card.decisions.filter { it.kind == "PRIORITY" }
-        val system = priority.single { it.source == "SYSTEM" }
-        val operator = priority.single { it.source == "OPERATOR" }
+        val priority = card.decisions.filter { it.kind == DecisionKind.PRIORITY }
+        val system = priority.single { it.source == DecisionSource.SYSTEM }
+        val operator = priority.single { it.source == DecisionSource.OPERATOR }
 
         assertFalse(system.isCurrent)
         assertTrue(operator.isCurrent)
-        assertEquals("OVERRIDE", operator.action)
+        assertEquals(DecisionAction.OVERRIDE, operator.action)
         assertEquals(system.id, operator.supersedesId)
         assertEquals("Дмитрий Соколов", operator.createdBy)
         assertEquals(2, card.priority)
@@ -91,10 +91,10 @@ class OperatorApiTest {
         assertNotNull(card.dueAt)
         assertTrue(card.isOverdue)
         assertTrue(card.details["circumstances"] != null)
-        assertTrue(card.files.all { it.analysisStatus == "NOT_REQUIRED" })
+        assertTrue(card.files.all { it.analysisStatus == AnalysisStatus.NOT_REQUIRED })
 
-        assertEquals("IN_REVIEW", card.history.last().toStatus)
-        assertTrue(card.comments.any { it.visibility == "INTERNAL" })
+        assertEquals(ClaimStatus.IN_REVIEW, card.history.last().toStatus)
+        assertTrue(card.comments.any { it.visibility == CommentVisibility.INTERNAL })
         assertTrue(card.files.isNotEmpty())
         assertNotNull(card.policy)
         assertEquals(listOf("APPLICANT_DRIVER", "OTHER_DRIVER"), card.participants.map { it.role })
@@ -104,8 +104,8 @@ class OperatorApiTest {
     fun draftCardNotAvailableToOperator() = apiTest { client ->
         val clientToken = client.loginClient().accessToken
         val draft = client.get("/api/mobile/claims") { bearerAuth(clientToken) }
-            .body<List<ru.tinsurance.api.ClaimListItem>>()
-            .first { it.status == ru.tinsurance.api.ClaimStatus.DRAFT }
+            .body<List<ClaimListItem>>()
+            .first { it.status == ClaimStatus.DRAFT }
 
         val token = client.loginOperator().accessToken
         assertEquals(HttpStatusCode.NotFound, client.get("/api/operator/claims/${draft.id}") { bearerAuth(token) }.status)

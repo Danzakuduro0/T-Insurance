@@ -1,6 +1,8 @@
 package ru.tinsurance.server
 
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.*
+import ru.tinsurance.api.operator.*
 import ru.tinsurance.server.demo.DemoData
 import io.ktor.client.call.*
 import io.ktor.client.request.*
