@@ -12,19 +12,15 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlin.time.Duration.Companion.minutes
 
-/** Имена провайдеров: authenticate(AUTH_MOBILE) { ... } / authenticate(AUTH_OPERATOR) { ... } */
 const val AUTH_MOBILE = "mobile"
 const val AUTH_OPERATOR = "operator"
 
 data class UserPrincipal(val userId: Long, val role: Role, val sessionId: Long)
 
-/** Имя лимита частоты для /auth/… — защищает от перебора паролей по многим логинам с одного адреса. */
+/** Лимит частоты для /auth/… — от перебора паролей по многим логинам с одного адреса. */
 val AUTH_RATE_LIMIT = RateLimitName("auth")
 
-/**
- * [sessionActive] — проверка по БД, что сессия токена не отозвана: подпись JWT сама по себе
- * не знает о выходе пользователя (вопрос безопасности: «выход должен действовать сразу»).
- */
+/** [sessionActive] — проверка по БД: подпись JWT сама по себе не знает о выходе пользователя. */
 fun Application.configureSecurity(
     tokens: TokenService,
     authRequestsPerMinute: Int,
@@ -37,13 +33,11 @@ fun Application.configureSecurity(
         }
     }
     install(Authentication) {
-        // Мобильное приложение: только клиенты, токен с аудиторией tstrah-mobile
         jwt(AUTH_MOBILE) {
             verifier(tokens.verifier(Channel.MOBILE))
             validate { credential -> credential.toPrincipal(setOf(Role.CLIENT))?.takeIf { sessionActive(it) } }
             challenge { _, _ -> call.respondUnauthorized() }
         }
-        // Веб оператора: операторы и администраторы, аудитория tstrah-operator
         jwt(AUTH_OPERATOR) {
             verifier(tokens.verifier(Channel.WEB))
             validate { credential -> credential.toPrincipal(setOf(Role.OPERATOR, Role.ADMIN))?.takeIf { sessionActive(it) } }

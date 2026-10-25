@@ -15,16 +15,9 @@ class ApplicationTest {
     }
 
     @Test
-    fun testRoot() = withApp {
-        val response = client.get("/")
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("Hello, Ktor!", response.bodyAsText())
-    }
-
-    @Test
     fun healthShowsAppliedSchemaVersion() = withApp {
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("""{"status":"UP","schemaVersion":"5"}""", response.bodyAsText())
+        assertEquals("""{"status":"UP","schemaVersion":"6"}""", response.bodyAsText())
     }
 }

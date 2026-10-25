@@ -6,6 +6,7 @@ import io.ktor.server.application.*
 import io.ktor.server.config.*
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
+import ru.tinsurance.server.common.int
 
 data class DatabaseConfig(
     val url: String,
@@ -18,15 +19,12 @@ data class DatabaseConfig(
             url = config.property("db.url").getString(),
             user = config.property("db.user").getString(),
             password = config.property("db.password").getString(),
-            maxPoolSize = config.propertyOrNull("db.maxPoolSize")?.getString()?.toInt() ?: 10,
+            maxPoolSize = config.int("db.maxPoolSize", 10),
         )
     }
 }
 
-/**
- * Пул соединений -> миграции Flyway -> подключение Exposed.
- * Миграции лежат в resources/db/migration и применяются при каждом старте (уже применённые пропускаются).
- */
+/** Пул соединений → миграции Flyway (resources/db/migration) → подключение Exposed. */
 fun Application.configureDatabase(config: DatabaseConfig): Database {
     val dataSource = HikariDataSource(
         HikariConfig().apply {

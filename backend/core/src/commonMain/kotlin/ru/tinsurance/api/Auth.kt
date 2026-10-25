@@ -2,15 +2,6 @@ package ru.tinsurance.api
 
 import kotlinx.serialization.Serializable
 
-// Общие модели API: используются сервером и мобильным приложением (app:shared).
-// Даты передаются строками ISO-8601, например "2026-10-10T12:00:00+07:00".
-
-@Serializable
-enum class Role { CLIENT, OPERATOR, ADMIN }
-
-@Serializable
-enum class DevicePlatform { ANDROID, IOS }
-
 @Serializable
 data class DeviceInfo(
     val installationId: String,
@@ -20,7 +11,6 @@ data class DeviceInfo(
     val pushToken: String? = null,
 )
 
-/** Вход клиента в мобильном приложении. */
 @Serializable
 data class MobileLoginRequest(
     val phone: String,
@@ -28,7 +18,6 @@ data class MobileLoginRequest(
     val device: DeviceInfo,
 )
 
-/** Вход сотрудника в веб-интерфейсе. */
 @Serializable
 data class OperatorLoginRequest(
     val email: String,
@@ -49,13 +38,10 @@ data class UserDto(
 
 @Serializable
 data class AuthResponse(
-    /** JWT, передаётся в заголовке `Authorization: Bearer <token>`. */
+    /** Передаётся в заголовке `Authorization: Bearer <token>`. */
     val accessToken: String,
     val accessTokenExpiresIn: Long,
-    /** Одноразовый: после /auth/refresh старый перестаёт работать. */
+    /** Одноразовый: после обновления старый перестаёт работать. */
     val refreshToken: String,
     val user: UserDto,
 )
-
-@Serializable
-data class ErrorResponse(val error: String, val message: String? = null)

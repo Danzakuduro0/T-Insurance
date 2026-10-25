@@ -4,6 +4,7 @@ import ru.tinsurance.api.ErrorResponse
 import ru.tinsurance.server.auth.TooManyAttemptsException
 import ru.tinsurance.server.common.ApiException
 import ru.tinsurance.server.common.AppMode
+import ru.tinsurance.server.common.long
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -23,8 +24,8 @@ import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 data class BodyLimits(val jsonBytes: Long, val uploadBytes: Long) {
     companion object {
         fun from(config: ApplicationConfig) = BodyLimits(
-            jsonBytes = config.propertyOrNull("security.maxJsonBodyBytes")?.getString()?.toLong() ?: (256L * 1024),
-            uploadBytes = config.propertyOrNull("files.maxUploadRequestBytes")?.getString()?.toLong() ?: (21L * 1024 * 1024),
+            jsonBytes = config.long("security.maxJsonBodyBytes", 256L * 1024),
+            uploadBytes = config.long("files.maxUploadRequestBytes", 21L * 1024 * 1024),
         )
     }
 }
@@ -35,18 +36,15 @@ fun ApplicationCall.isFileUpload() =
 
 fun Application.configureHttp(corsAllowedHosts: List<String>, mode: AppMode, limits: BodyLimits) {
     install(ContentNegotiation) {
-        // null-поля отправляются явно: DTO из core читаются клиентом с любыми настройками Json
         json(Json { ignoreUnknownKeys = true })
     }
     install(CallLogging)
 
-    // Ограничение размера тела: защита памяти и БД от огромных запросов
     install(RequestBodyLimit) {
         bodyLimit { call -> if (call.isFileUpload()) limits.uploadBytes else limits.jsonBytes }
     }
 
-    // Веб оператора открывается с другого адреса (dev-сервер React/Angular) — разрешаем ему ходить к API.
-    // Мобильному приложению CORS не нужен.
+    // веб оператора открывается с другого адреса (dev-сервер); мобильному приложению CORS не нужен
     install(CORS) {
         corsAllowedHosts.forEach { allowHost(it, schemes = listOf("http", "https")) }
         allowHeader(HttpHeaders.Authorization)
@@ -68,12 +66,11 @@ fun Application.configureHttp(corsAllowedHosts: List<String>, mode: AppMode, lim
             call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("PAYLOAD_TOO_LARGE", "Слишком большой запрос"))
         }
         exception<BadRequestException> { call, cause ->
-            // Детали разбора JSON (имена классов, поля) — только в режиме dev; в prod — общий текст
+            // детали разбора JSON — только в dev
             val detail = if (mode == AppMode.DEV) cause.rootMessage() else null
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("BAD_REQUEST", detail ?: "Некорректный запрос: проверьте формат и обязательные поля"))
         }
-        // Нарушение правил, которые проверяет сама БД. Клиенту — понятный текст без имён таблиц и ограничений,
-        // подробности — только в лог.
+        // нарушение правил БД: клиенту — понятный текст без имён таблиц, подробности — в лог
         exception<ExposedSQLException> { call, cause ->
             val (status, code, message) = when (cause.sqlState) {
                 "23514" -> Triple(HttpStatusCode.Conflict, "RULE_VIOLATION", "Действие нарушает правила обработки обращения")

@@ -1,6 +1,6 @@
 # Структура бэкенда «Т-Страхование: сопровождение страхового случая»
 
-Состояние на 18.10.2026: готовы авторизация, черновики и отправка обращений, проверка комплектности,
+Состояние на 25.10.2026: готовы авторизация, черновики и отправка обращений, проверка комплектности,
 очередь и карточка оператора, загрузка файлов, фоновый анализ фото и маршрутизация после анализа. Что дальше — в конце документа.
 
 ## Стек
@@ -33,73 +33,69 @@ backend/             ← папка бэкенда в репозитории T-I
 
 ## server: код
 
-Пакет `ru.tinsurance.server`, путь `server/src/main/kotlin/…`
+Пакет `ru.tinsurance.server`, путь `server/src/main/kotlin/…`. Каждый раздел делится по ролям:
+
+| Слой | Что делает |
+|---|---|
+| `*Routes.kt` | только HTTP: разобрать запрос, вызвать сервис, отдать ответ |
+| `*Service.kt` | сценарий: что за чем вызвать в одной транзакции `db.tx { }` |
+| `*Repository.kt`, `*Queries.kt` | запросы Exposed; вызываются внутри транзакции |
+| `*Validator.kt`, `*Rules.kt` | проверки и правила |
 
 ```
-Application.kt              точка входа: читает конфиг, собирает сервисы, подключает плагины и маршруты
+Application.kt              точка входа: проверка конфигурации, БД, плагины, маршруты, фоновый воркер
+AppContainer.kt             создаёт все сервисы один раз (зависимости — через конструкторы)
 │
-├── plugins/
-│   ├── Http.kt             JSON, CORS, логирование, лимиты размера запроса, перевод ошибок в HTTP-ответы
-│   └── Routing.kt          /health, подключение маршрутов mobile и operator
-│
-├── common/
-│   ├── Common.kt           ApiException и наследники (404/401/400/409), db.tx { }, разбор дат, нормализация телефона
-│   └── AppMode.kt          режим запуска DEV / PROD
-│
-├── db/
-│   ├── Database.kt         пул соединений, запуск миграций Flyway
-│   └── Tables.kt           описание таблиц для Exposed (зеркало SQL-миграций)
+├── plugins/                Http.kt — JSON, CORS, лимиты, ошибки → HTTP; Routing.kt — /health и маршруты
+├── common/                 Config.kt (чтение настроек), Errors.kt, Transactions.kt (db.tx), Formats.kt, AppMode.kt
+├── db/                     Database.kt (пул, Flyway) и таблицы Exposed по разделам:
+│                           ReferenceTables, UserTables, ClaimTables, FileTables, JobTables, Views
+├── users/                  UserRepository — пользователи, имена пачкой для карточек
 │
 ├── auth/
-│   ├── Tokens.kt           JwtConfig, выпуск и проверка токенов, хэширование паролей (bcrypt)
-│   ├── AuthService.kt      вход, обновление и отзыв refresh-токенов
-│   ├── AuthRoutes.kt       /auth/login, /auth/refresh, /auth/logout для обоих каналов
-│   ├── Security.kt         JWT-провайдеры AUTH_MOBILE / AUTH_OPERATOR (+ проверка, что сессия не отозвана),
-│   │                       ограничение частоты запросов к /auth
-│   └── LoginThrottle.kt    блокировка логина после 5 неудачных попыток
+│   ├── AuthService.kt      вход, обновление и отзыв токенов, защита от перебора
+│   ├── AuthRoutes.kt       /auth/login, /auth/refresh, /auth/logout — одна функция для обоих каналов
+│   ├── SessionRepository.kt, DeviceRepository.kt
+│   ├── Tokens.kt           JWT, refresh-токены, bcrypt
+│   ├── Security.kt         провайдеры AUTH_MOBILE / AUTH_OPERATOR, лимит частоты /auth
+│   └── LoginThrottle.kt    блокировка логина после неудачных попыток
 │
-├── claims/                 общая логика обращений (не зависит от канала)
-│   ├── ClaimTransitions.kt граф разрешённых переходов статусов: кто и куда может перевести
-│   ├── ClaimStatusService.kt  смена статуса + запись в историю (единственное место, где меняется статус)
-│   ├── Completeness.kt     проверка комплектности: обязательные поля и документы по типу события
-│   ├── ClaimIntake.kt      решение о комплектности, запрос материалов, переход к анализу (общее для API и воркера)
-│   ├── ClaimDecisionWriter.kt  запись решений системы в claim_decisions (история не перезаписывается)
-│   └── ClaimQueries.kt     общие выборки: файлы, участники, запросы материалов
+├── claims/                 логика обращений, общая для API и воркера
+│   ├── ClaimRepository.kt  обращение клиента, создание черновика, изменение полей
+│   ├── ClaimInput.kt       поля от клиента (общие для создания и изменения), JSON изменений для журнала
+│   ├── ClaimInputValidator.kt  размеры, участники, доп. сведения, дата события
+│   ├── ClaimUpdater.kt     изменение обращения (в черновике — всё, по запросу — только запрошенное)
+│   ├── ClaimSubmission.kt  отправка: комплектность → NEEDS_INFO или IN_ANALYSIS
+│   ├── ClaimIntake.kt      решение о комплектности, запрос материалов, переход к анализу
+│   ├── ClaimStatusService.kt  смена статуса + история (единственное место, где меняется статус)
+│   ├── ClaimTransitions.kt граф разрешённых переходов
+│   ├── ClaimDecisionWriter.kt  решения системы в claim_decisions (история не перезаписывается)
+│   ├── CompletenessChecker.kt, CompletenessResult.kt, ClaimRules.kt  что нужно по типу события и чего не хватает
+│   ├── ParticipantRepository.kt, PolicyRepository.kt, InfoRequestRepository.kt
+│   ├── AuditWriter.kt      журнал действий (audit_log) — одна точка записи
+│   └── Actor.kt, ClaimsConfig.kt
 │
-├── mobile/                 API клиента
-│   ├── MobileRoutes.kt     маршруты /api/mobile/...
-│   └── MobileClaimService.kt  полисы, типы событий, черновик, редактирование, отправка, таймлайн
+├── mobile/                 API клиента: MobileRoutes, MobileClaimService, MobileClaimQueries (список, карточка, таймлайн)
+├── operator/               API оператора: OperatorRoutes, OperatorClaimService,
+│                           QueueFilter (разбор фильтров), QueueRepository, ClaimCardQueries
 │
-├── operator/               API оператора
-│   ├── OperatorRoutes.kt   маршруты /api/operator/...
-│   ├── OperatorClaimService.kt  очередь с фильтрами, карточка обращения
-│   └── OperatorDtos.kt     DTO, которые нужны только вебу оператора
+├── files/
+│   ├── UploadService.kt    сценарий загрузки: проверки → содержимое → сохранение
+│   ├── UploadRules.kt      когда можно добавлять и заменять файлы
+│   ├── UploadRecorder.kt   запись принятого / отклонённого / дубля, постановка фото на анализ
+│   ├── DuplicateFinder.kt  тот же снимок в другом обращении (SHA-256 или перцептивный хэш)
+│   ├── FileAccessService.kt  отдача содержимого клиенту и оператору
+│   ├── FileRepository.kt   запросы к claim_files
+│   ├── FileInspector.kt, ImageMetadata.kt  проверка JPEG/PNG/PDF, удаление EXIF/GPS, dHash
+│   ├── MultipartUpload.kt  multipart во временный файл, безопасная отдача файла
+│   └── FileStorage.kt, FilesConfig.kt, UploadModels.kt, Rejections.kt
 │
-├── files/                  загрузка и выдача файлов
-│   ├── FileRoutes.kt       разбор multipart во временный файл, отдача файла с безопасными заголовками
-│   ├── FileService.kt      правила загрузки: права, лимиты, дубли, замена, постановка фото на анализ;
-│   │                       одновременно в памяти — не больше files.maxConcurrentProcessing загрузок
-│   ├── FileInspector.kt    проверка по содержимому (JPEG/PNG/PDF), удаление EXIF/GPS, отказ с подсказкой,
-│   │                       перцептивный хэш (dHash) для поиска пересжатых копий фото
-│   └── FileStorage.kt      хранилище файлов: интерфейс + LocalFileStorage (на диске; позже S3)
-│
-├── jobs/                   фоновые задачи (шаг 3)
-│   ├── JobQueue.kt         очередь в таблице background_jobs: постановка, взятие (FOR UPDATE SKIP LOCKED), повторы
-│   └── JobWorker.kt        воркер: цикл опроса, параллельная обработка, возврат «зависших» задач
-│
-├── analysis/               анализ фото (шаг 3)
-│   ├── ImageAnalyzer.kt    интерфейс, формат результата (раздел 6.2), настройки, разбор ответа ML
-│   ├── HttpImageAnalyzer.kt  клиент ML-сервиса: POST {ML_URL}/analyze, таймаут 10 с
-│   ├── LocalImageAnalyzer.kt  без ML-сервиса: размытость, яркость, разрешение по порогам 6.3
-│   ├── AnalyzeImageHandler.kt  задача ANALYZE_IMAGE: результат в image_analyses, непригодное фото → REJECTED
-│   └── QualityHints.kt     подсказки клиенту по проблемам качества
-│
-├── routing/                куда отправить обращение после анализа
-│   ├── RoutingRules.kt     чистая функция правил (раздел 6.4): STANDARD / MANUAL_REVIEW, приоритет, причины
-│   └── RouteClaimHandler.kt  задача ROUTE_CLAIM: ждёт анализ, фото не годны → NEEDS_INFO, иначе → QUEUED
-│
-└── demo/
-    └── DemoData.kt         вымышленные демо-данные для пустой БД (клиенты, операторы, обращения)
+├── jobs/                   JobQueue (background_jobs, SKIP LOCKED, повторы), JobWorker (цикл, параллельность)
+├── analysis/               ImageAnalyzer, HttpImageAnalyzer (ML), LocalImageAnalyzer (без ML), AnalyzeImageHandler,
+│                           ImageAnalysisRepository, AnalysisConfig, MlResponse, QualityHints
+├── routing/                RoutingRules (чистые правила), RouteClaimHandler (задача ROUTE_CLAIM),
+│                           RoutingDecisionWriter (решения и постановка в очередь), RoutingConfig
+└── demo/                   DemoData, DemoSettings — вымышленные данные для пустой БД
 ```
 
 ### Как проходит запрос
@@ -135,11 +131,19 @@ HTTP → plugins/Http (лимит размера, JSON) → auth (JWT, кана�
 
 ## core: общие модели
 
-`core/src/commonMain/kotlin/…/api/`:
-- **`Auth.kt`** — запросы и ответы входа и токенов.
-- **`Claims.kt`** — обращения, участники, файлы, комплектность, запросы материалов, таймлайн, enum статусов `ClaimStatus` и полей `ClaimField`.
+`core/src/commonMain/kotlin/ru/tinsurance/api/` — всё, что ходит по сети, общее для сервера, приложения клиента и веба оператора:
 
-Мобильное приложение подключает `core` и использует те же классы, поэтому формат JSON у сервера и приложения не расходится. Если добавляешь поле в DTO, давай ему значение по умолчанию — тогда старая версия приложения не сломается.
+| Файл | Что внутри |
+|---|---|
+| `ApiPaths.kt` | адреса эндпоинтов `MobileApi.*`, `OperatorApi.*`; параметры: `MobileApi.CLAIM.path("id" to 42)` |
+| `Enums.kt` | статусы и коды: `ClaimStatus`, `FileStatus`, `AnalysisStatus`, `InfoRequestStatus`, `MaterialIssue`, `DecisionKind`… — совпадают с кодами в БД |
+| `Common.kt` | `ErrorResponse`, `Page<T>` |
+| `Auth.kt` | вход, токены, `UserDto` |
+| `Claims.kt` | общие для обоих клиентов: полис, участники, файлы, запросы материалов |
+| `mobile/` | черновик, карточка клиента, список, таймлайн, комплектность, форма по типу события |
+| `operator/` | очередь, карточка оператора, решения, история, анализ фото |
+
+Сервер регистрирует маршруты теми же константами из `ApiPaths`, поэтому адрес на клиенте и сервере не разойдётся. Фронтенд из папки `frontend/` подключит модуль так: `includeBuild("../backend")` и зависимость от `core`. Если добавляешь поле в DTO, давай ему значение по умолчанию — тогда старая версия приложения не сломается.
 
 ## База данных
 
@@ -152,8 +156,9 @@ HTTP → plugins/Http (лимит размера, JSON) → auth (JWT, кана�
 | V3 | Разделение на мобильного клиента и веб оператора: сессии, устройства, запросы материалов, представления |
 | V4 | Приведение к ответам на вопросы: видимость статусов клиенту, SLA, правила полей и документов по типу события, решения по маршрутизации |
 | V5 | Отдельный комментарий для клиента в истории статусов (внутренняя причина клиенту не показывается) |
+| V6 | Удалено неиспользуемое представление `claim_client_timeline` |
 
-**Применённую миграцию не редактировать никогда.** Любое изменение схемы делается новым файлом `V6__…sql`, `V7__…sql`. Затем нужно обновить `db/Tables.kt` и номер версии в `ApplicationTest`.
+**Применённую миграцию не редактировать никогда.** Любое изменение схемы делается новым файлом `V7__…sql`, `V8__…sql`. Затем нужно обновить таблицы в `db/` и номер версии в `ApplicationTest`.
 
 ### Таблицы
 
@@ -166,7 +171,7 @@ HTTP → plugins/Http (лимит размера, JSON) → auth (JWT, кана�
 | Маршрутизация | `claim_decisions` (только добавление записей: SET / CONFIRM / OVERRIDE) |
 | Служебные | `audit_log`, `notifications`, `background_jobs` |
 
-- **Представления (view):** `client_claim_list`, `claim_client_timeline` (только видимые клиенту события), `operator_claim_list`, `operator_load`, `queue_load`.
+- **Представления (view):** `client_claim_list`, `operator_claim_list`, `operator_load`, `queue_load`.
 - **Триггеры:**
   - `claims_before_update` не даёт выполнить переход статуса, которого нет в `status_transitions`;
   - `status_history_check_actor` проверяет, что переход делает разрешённая роль.
@@ -210,7 +215,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 ## Docker
 
-Сервер в контейнер собирается из готового jar. Gradle внутри Docker не запускается: проекту с Android-модулями нужен Android SDK.
+Сервер в контейнер собирается из готового jar.
 
 | Что сделать | Команда |
 |---|---|
@@ -233,7 +238,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 ## Тесты
 
-Лежат в `server/src/test/kotlin/…`. Запуск: `./gradlew :server:test` (74 теста, Docker не нужен).
+Лежат в `server/src/test/kotlin/…`. Запуск: `./gradlew :server:test` (73 теста, Docker не нужен).
 
 | Файл | Что проверяет |
 |---|---|

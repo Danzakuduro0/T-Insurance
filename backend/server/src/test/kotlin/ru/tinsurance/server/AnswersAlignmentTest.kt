@@ -1,6 +1,8 @@
 package ru.tinsurance.server
 
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.*
+import ru.tinsurance.api.operator.*
 import ru.tinsurance.server.demo.DemoData
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -163,13 +165,13 @@ class AnswersAlignmentTest {
         s.file(claim.id, "ACCIDENT_NOTICE")
 
         val check = http.get("/api/mobile/claims/${claim.id}/completeness") { bearerAuth(s.token) }.body<CompletenessDto>()
-        assertEquals(listOf(ProblemFileDto(broken, "DAMAGE_PHOTO", "INVALID_FORMAT", "CORRUPTED")), check.problemFiles)
+        assertEquals(listOf(ProblemFileDto(broken, "DAMAGE_PHOTO", MaterialIssue.INVALID_FORMAT, RejectionReason.CORRUPTED)), check.problemFiles)
 
         val items = s.submit(claim.id).openInfoRequest!!.items
         val replace = items.single { it.fileId == broken }
-        assertEquals("INVALID_FORMAT", replace.issue)
+        assertEquals(MaterialIssue.INVALID_FORMAT, replace.issue)
         assertTrue(replace.hint!!.contains("JPEG"))
-        assertTrue(items.none { it.issue == "MISSING" && it.documentType == "DAMAGE_PHOTO" })  // недостающее фото = заменить битое
+        assertTrue(items.none { it.issue == MaterialIssue.MISSING && it.documentType == "DAMAGE_PHOTO" })  // недостающее фото = заменить битое
     }
 
     @Test

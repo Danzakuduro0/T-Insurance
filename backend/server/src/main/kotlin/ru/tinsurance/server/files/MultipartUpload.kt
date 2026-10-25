@@ -1,6 +1,7 @@
 package ru.tinsurance.server.files
 
 import io.ktor.http.*
+import ru.tinsurance.server.common.ValidationException
 import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -13,9 +14,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Разбор multipart: поля documentType, clientRequestId, replacesFileId и сам файл (file).
- * Файл пишется во временный файл (не в память) и не больше maxBytes: дальше не дочитываем и помечаем как слишком большой.
- * Временный файл удаляет UploadForm.close() — вызывайте через use { }.
+ * Разбор multipart: documentType, clientRequestId, replacesFileId и file. Файл пишется во временный файл
+ * не больше maxBytes. Временный файл удаляет UploadForm.close() — вызывайте через use { }.
  */
 suspend fun ApplicationCall.receiveUpload(maxBytes: Long): UploadForm {
     var documentType: String? = null
@@ -34,7 +34,7 @@ suspend fun ApplicationCall.receiveUpload(maxBytes: Long): UploadForm {
                         "documentType" -> documentType = part.value.take(64)
                         "clientRequestId" -> clientRequestId = part.value.take(64)
                         "replacesFileId" -> replacesFileId = part.value.trim().toLongOrNull()
-                            ?: throw ru.tinsurance.server.common.ValidationException("replacesFileId: ожидается id файла")
+                            ?: throw ValidationException("replacesFileId: ожидается id файла")
                     }
                     is PartData.FileItem -> if (part.name == "file" && contentFile == null) {
                         originalName = part.originalFileName
@@ -71,7 +71,7 @@ private fun InputStream.copyLimited(target: Path, maxBytes: Long): Long? {
     }
 }
 
-/** Отдача содержимого: тип из БД, без угадывания браузером, без кэширования, имя файла генерирует сервер. */
+/** Тип из БД, без угадывания браузером и кэширования; имя файла генерирует сервер. */
 suspend fun ApplicationCall.respondStoredFile(file: StoredFile) {
     response.header(HttpHeaders.ContentDisposition,
         ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, file.downloadName).toString())

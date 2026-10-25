@@ -1,6 +1,8 @@
 package ru.tinsurance.server.auth
 
 import ru.tinsurance.server.common.ApiException
+import ru.tinsurance.server.common.int
+import ru.tinsurance.server.common.minutes
 import io.ktor.http.*
 import io.ktor.server.config.*
 import java.time.Duration
@@ -17,18 +19,16 @@ data class LoginThrottleConfig(
 ) {
     companion object {
         fun from(config: ApplicationConfig) = LoginThrottleConfig(
-            maxFailures = config.propertyOrNull("security.maxFailedLogins")?.getString()?.toInt() ?: 5,
-            window = Duration.ofMinutes(config.propertyOrNull("security.failedLoginWindowMinutes")?.getString()?.toLong() ?: 15),
-            lock = Duration.ofMinutes(config.propertyOrNull("security.loginLockMinutes")?.getString()?.toLong() ?: 5),
+            maxFailures = config.int("security.maxFailedLogins", 5),
+            window = config.minutes("security.failedLoginWindowMinutes", 15),
+            lock = config.minutes("security.loginLockMinutes", 5),
         )
     }
 }
 
 /**
- * Защита от перебора пароля для конкретного логина (телефон / email):
- * после maxFailures неудач за window вход по этому логину блокируется на lock — даже с верным паролем.
- * Перебор с одного адреса по многим логинам ограничивает RateLimit на /auth/… (Security.kt).
- * Хранится в памяти процесса: для одного экземпляра сервера этого достаточно.
+ * Защита от перебора пароля одного логина: после maxFailures неудач за window вход блокируется на lock.
+ * Хранится в памяти процесса — достаточно для одного экземпляра сервера.
  */
 class LoginThrottle(private val config: LoginThrottleConfig, private val now: () -> Instant = Instant::now) {
 

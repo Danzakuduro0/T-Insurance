@@ -57,7 +57,7 @@ can still replace it. After submit the claim waits for the analysis (at most 15 
 
 Required fields and documents per event type live in reference tables (`event_type_fields`, `required_documents`).
 How each answer from the clarification document is implemented — [docs/OPEN_QUESTIONS.md](./docs/OPEN_QUESTIONS.md).
-Request/response models are shared with the app: [core/api](./core/src/commonMain/kotlin/ru/tinsurance/api).
+Request/response models, status enums and endpoint paths (`MobileApi`, `OperatorApi`) are shared with the client apps: [core/api](./core/src/commonMain/kotlin/ru/tinsurance/api).
 
 Operator web (login by email) — `/api/operator`:
 `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /me`,

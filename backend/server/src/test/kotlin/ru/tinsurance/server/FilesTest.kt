@@ -1,6 +1,8 @@
 package ru.tinsurance.server
 
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.*
+import ru.tinsurance.api.operator.*
 import ru.tinsurance.server.demo.DemoData
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -12,7 +14,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import ru.tinsurance.server.files.FileInspector
 import ru.tinsurance.server.files.PerceptualHash
-import ru.tinsurance.server.operator.ClaimCard
 import java.awt.Color
 import java.awt.GradientPaint
 import java.awt.RenderingHints
@@ -166,7 +167,7 @@ class FilesTest {
         val response = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(1))
         assertEquals(HttpStatusCode.Created, response.status)
         val file = response.body<ClaimFileDto>()
-        assertEquals("ACCEPTED", file.status)
+        assertEquals(FileStatus.ACCEPTED, file.status)
         assertEquals("image/jpeg", file.mimeType)
 
         // вопрос 50–51: анализ — в фоне, задача поставлена
@@ -221,8 +222,8 @@ class FilesTest {
             val response = s.upload(claim.id, type, bytes)
             assertEquals(HttpStatusCode.UnprocessableEntity, response.status, reason)
             val file = response.body<ClaimFileDto>()
-            assertEquals("REJECTED", file.status)
-            assertEquals(reason, file.rejectionReason)
+            assertEquals(FileStatus.REJECTED, file.status)
+            assertEquals(reason, file.rejectionReason?.name)
             assertNotNull(file.hint)
         }
         val good = jpeg(21)
@@ -235,8 +236,8 @@ class FilesTest {
 
         // принятый ранее файл на месте (вопрос 16)
         val details = http.get("/api/mobile/claims/${claim.id}") { bearerAuth(s.token) }.body<ClaimDetails>()
-        assertEquals(2, details.files.count { it.status == "ACCEPTED" })
-        assertEquals(5, details.files.count { it.status == "REJECTED" })
+        assertEquals(2, details.files.count { it.status == FileStatus.ACCEPTED })
+        assertEquals(5, details.files.count { it.status == FileStatus.REJECTED })
     }
 
     @Test
@@ -276,7 +277,7 @@ class FilesTest {
         val again = s.upload(claim.id, "DAMAGE_PHOTO", photo, name = "copy.jpg")
         assertEquals(HttpStatusCode.OK, again.status)
         val duplicate = again.body<ClaimFileDto>()
-        assertEquals("DUPLICATE", duplicate.status)
+        assertEquals(FileStatus.DUPLICATE, duplicate.status)
         assertEquals(first.id, duplicate.duplicateOfFileId)
 
         val requestId = UUID.randomUUID().toString()
@@ -386,6 +387,6 @@ class FilesTest {
         assertNotNull(flagged)
         assertEquals(annaClaim.id, flagged.claimId)
         assertEquals(annaFile.id, flagged.fileId)
-        assertEquals("SIMILAR", flagged.match)
+        assertEquals(MatchType.SIMILAR, flagged.match)
     }
 }

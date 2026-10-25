@@ -3,10 +3,11 @@ package ru.tinsurance.server
 import ru.tinsurance.server.analysis.AnalysisRequest
 import ru.tinsurance.server.analysis.LocalImageAnalyzer
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.*
+import ru.tinsurance.api.operator.*
 import ru.tinsurance.server.demo.DemoData
 import ru.tinsurance.server.files.LocalFileStorage
 import ru.tinsurance.server.jobs.JobWorker
-import ru.tinsurance.server.operator.ClaimCard
 import ru.tinsurance.server.routing.PhotoAnalysis
 import ru.tinsurance.server.routing.RoutingConfig
 import ru.tinsurance.server.routing.RoutingInput
@@ -222,16 +223,16 @@ class AnalysisTest {
             // анализ идёт ещё в черновике: клиент узнаёт о плохом фото до отправки
             runWorker()
             val draftFile = claim(claim.id).files.first { it.id == blurry.id }
-            assertEquals("REJECTED", draftFile.status)
-            assertEquals("LOW_QUALITY", draftFile.rejectionReason)
+            assertEquals(FileStatus.REJECTED, draftFile.status)
+            assertEquals(RejectionReason.LOW_QUALITY, draftFile.rejectionReason)
             assertTrue(draftFile.hint!!.contains("размыт"), draftFile.hint)
-            assertEquals("ACCEPTED", claim(claim.id).files.first { it.id == good.id }.status)
+            assertEquals(FileStatus.ACCEPTED, claim(claim.id).files.first { it.id == good.id }.status)
 
             // отправка с плохим фото → запрос переснять именно его
             val sent = submit(claim.id)
             assertEquals(ClaimStatus.NEEDS_INFO, sent.status)
             val item = sent.openInfoRequest!!.items.single { it.fileId == blurry.id }
-            assertEquals("LOW_QUALITY", item.issue)
+            assertEquals(MaterialIssue.LOW_QUALITY, item.issue)
             assertTrue(item.hint!!.contains("размыт"))
 
             // замена фото и повторная отправка → анализ → очередь
@@ -254,7 +255,7 @@ class AnalysisTest {
 
             assertEquals("NEEDS_INFO", status(claim.id))
             val request = claim(claim.id).openInfoRequest!!
-            assertEquals(2, request.items.count { it.issue == "LOW_QUALITY" })
+            assertEquals(2, request.items.count { it.issue == MaterialIssue.LOW_QUALITY })
             assertTrue(request.items.all { it.hint!!.contains("темно") })
         }
     }
@@ -319,7 +320,7 @@ class AnalysisTest {
             runWorker()
 
             val file = claim(claim.id).files.first { it.id == blurry.id }
-            assertEquals("REJECTED", file.status)
+            assertEquals(FileStatus.REJECTED, file.status)
             assertTrue(file.hint!!.contains("размыт"), file.hint)
             assertEquals(LocalImageAnalyzer.MODEL_VERSION, query("select model_version from image_analyses where file_id = ${blurry.id}"))
 
@@ -375,7 +376,7 @@ class AnalysisTest {
     @Test
     fun routingRulesExplainEveryManualReview() {
         val config = RoutingConfig(confidenceThreshold = 0.65f)
-        fun photo(conf: Float?, status: String = "DONE", type: String? = "DENT") = PhotoAnalysis(Random.nextLong(), status, type, conf)
+        fun photo(conf: Float?, status: AnalysisStatus = AnalysisStatus.DONE, type: String? = "DENT") = PhotoAnalysis(Random.nextLong(), status, type, conf)
 
         val ok = RoutingRules.decide(RoutingInput(listOf(photo(0.9f), photo(0.7f)), null), config)
         assertEquals("STANDARD", ok.direction)
@@ -390,7 +391,7 @@ class AnalysisTest {
         assertTrue(duplicate.reasons.single().contains("TS-0000007"))
 
         val mixed = RoutingRules.decide(
-            RoutingInput(listOf(photo(0.3f), photo(null, type = null), photo(null, status = "FAILED", type = null)), null), config,
+            RoutingInput(listOf(photo(0.3f), photo(null, type = null), photo(null, status = AnalysisStatus.FAILED, type = null)), null), config,
         )
         assertEquals("MANUAL_REVIEW", mixed.direction)
         assertEquals(2, mixed.priority)

@@ -14,11 +14,11 @@ import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Duration
 import java.time.OffsetDateTime
 
-/** Виды фоновых задач (CHECK в background_jobs.type). maxAttempts — сколько всего запусков, включая первый. */
+/** Виды фоновых задач (CHECK в background_jobs.type). maxAttempts — всего запусков, включая первый. */
 enum class JobType(val maxAttempts: Int) {
-    /** Анализ фото ML-сервисом: 1 запуск + 3 повтора (раздел 6.5 требований). */
+    /** 1 запуск + 3 повтора. */
     ANALYZE_IMAGE(4),
-    /** Решение, куда отправить обращение после анализа; ждёт анализ фото, поэтому запусков много. */
+    /** Ждёт анализ фото, поэтому запусков много. */
     ROUTE_CLAIM(20),
     SEND_NOTIFICATION(5),
 }
@@ -40,9 +40,8 @@ sealed interface JobOutcome {
 }
 
 /**
- * Очередь задач в таблице background_jobs. Задача ставится в той же транзакции, что и изменение,
- * которое её породило (файл, отправка обращения), поэтому при сбое не теряется (критерий AC-05).
- * Несколько воркеров берут задачи без конфликтов: FOR UPDATE SKIP LOCKED.
+ * Очередь задач в background_jobs. Задача ставится в той же транзакции, что и породившее её изменение,
+ * поэтому при сбое не теряется. Несколько воркеров берут задачи без конфликтов: FOR UPDATE SKIP LOCKED.
  */
 object JobQueue {
     private val json = Json
