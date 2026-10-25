@@ -126,7 +126,7 @@ object DemoData {
                 it[Users.email] = email
                 it[passwordHash] = this@Seeder.passwordHash
                 it[maxActiveClaims] = if (role == Role.OPERATOR) 10 else null
-                it[availability] = OperatorAvailability.ONLINE
+                it[availability] = OperatorAvailability.OFFLINE
                 it[isActive] = true
                 it[createdAt] = now.minusDays(30)
             }[Users.id]

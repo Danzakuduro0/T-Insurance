@@ -7,6 +7,8 @@ import io.ktor.server.routing.*
 import ru.tinsurance.api.OperatorApi
 import ru.tinsurance.api.operator.ConfirmDecisionRequest
 import ru.tinsurance.api.operator.OverrideDecisionRequest
+import ru.tinsurance.server.assignment.AssignmentService
+import ru.tinsurance.server.assignment.assignmentRoutes
 import ru.tinsurance.server.auth.AUTH_OPERATOR
 import ru.tinsurance.server.auth.AuthService
 import ru.tinsurance.server.auth.Channel
@@ -21,6 +23,7 @@ fun Route.operatorRoutes(
     auth: AuthService,
     claims: OperatorClaimService,
     decisions: DecisionReviewService,
+    assignments: AssignmentService,
     files: FileAccessService,
 ) {
     authRoutes(auth, Channel.WEB, OperatorApi.LOGIN, OperatorApi.REFRESH, OperatorApi.LOGOUT)
@@ -39,5 +42,6 @@ fun Route.operatorRoutes(
         post(OperatorApi.CLAIM_DECISION_OVERRIDE) {
             call.respond(decisions.override(call.user.actor, call.longParam("id"), call.receive<OverrideDecisionRequest>()))
         }
+        assignmentRoutes(assignments)
     }
 }

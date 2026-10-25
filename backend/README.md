@@ -74,6 +74,16 @@ Operator decisions (step 4): `GET /directions` (for the routing form),
 An operator can change only a claim assigned to them (`ASSIGNED` / `IN_REVIEW`), otherwise 403; an admin can also change
 queued claims. Expired and revoked sessions are deleted after `security.sessionRetentionDays` (30).
 
+Assignment (step 5): `PUT /me/availability` `{"availability":"ONLINE|BREAK|OFFLINE"}` — an operator on shift (ONLINE)
+immediately gets queued claims of their directions; `POST /claims/{id}/take` («Взять в работу», 409 if someone was faster or
+the limit is reached, 403 for another direction), `POST /claims/{id}/start-review`, `POST /claims/{id}/release` `{"reason"}`
+(back to the queue, offered to another operator on shift). After analysis a claim goes automatically to the least loaded
+operator of its direction on shift; a claim returning after extra materials goes back to the previous operator.
+Admin only: `GET /operators` (load, directions, availability), `POST /claims/{id}/assign` `{"operatorId","reason"}` —
+assign from the queue or reassign a claim in work. Limit per operator — `users.max_active_claims`, otherwise
+`assignment.defaultMaxActiveClaims` (5); auto-assignment can be switched off with `assignment.autoAssign`.
+Demo operators start OFFLINE.
+
 Access tokens stop working immediately after logout, refresh rotation or user deactivation (the session is checked on every request).
 
 ### Docker

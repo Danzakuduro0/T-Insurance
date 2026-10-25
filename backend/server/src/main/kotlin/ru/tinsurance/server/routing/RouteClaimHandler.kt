@@ -12,6 +12,7 @@ import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.FileStatus
 import ru.tinsurance.server.analysis.AnalysisConfig
 import ru.tinsurance.server.analysis.ImageAnalysisRepository
+import ru.tinsurance.server.assignment.AutoAssigner
 import ru.tinsurance.server.claims.ClaimIntake
 import ru.tinsurance.server.claims.ClaimRepository
 import ru.tinsurance.server.claims.ClaimsConfig
@@ -27,13 +28,15 @@ import java.time.OffsetDateTime
 
 /**
  * Задача ROUTE_CLAIM — ставится, когда обращение переходит в IN_ANALYSIS. Ждёт анализ всех фото, но не дольше
- * maxWait. Дальше: фото отклонено — запрос клиенту (NEEDS_INFO), иначе — очередь по правилам маршрутизации.
+ * maxWait. Дальше: фото отклонено — запрос клиенту (NEEDS_INFO), иначе — очередь по правилам маршрутизации
+ * и автоназначение оператору на смене.
  */
 class RouteClaimHandler(
     private val db: Database,
     private val analysis: AnalysisConfig,
     private val routing: RoutingConfig,
     private val claims: ClaimsConfig,
+    private val autoAssigner: AutoAssigner,
 ) : JobHandler {
     override val type = JobType.ROUTE_CLAIM
 
@@ -57,6 +60,7 @@ class RouteClaimHandler(
         }
         val decision = RoutingRules.decide(RoutingInput(photos, duplicateClaimNumber(claim)), routing)
         RoutingDecisionWriter.apply(claimId, decision, photos, now)
+        autoAssigner.assignQueued(claimId)
         JobOutcome.Done
     }
 
@@ -72,6 +76,7 @@ class RouteClaimHandler(
                 confidence = null, damageType = null,
             )
             RoutingDecisionWriter.apply(claimId, decision, emptyList(), OffsetDateTime.now())
+            autoAssigner.assignQueued(claimId)
         }
     }
 
