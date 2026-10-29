@@ -10,6 +10,8 @@ import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import ru.tinsurance.server.files.FileInspector
@@ -311,6 +313,47 @@ class FilesTest {
         } finally {
             TestDatabase.connection().use { it.createStatement().execute("update document_types set max_size_bytes = 20971520 where code = 'OTHER'") }
         }
+    }
+
+    @Test
+    fun replacementAtFileCountLimitKeepsOnlyNewFileActive() = apiTest(TestDatabase.config("files.maxFilesPerClaim" to "1")) { http ->
+        val s = http.anna()
+        val claim = s.accidentDraft()
+        val old = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(810)).body<ClaimFileDto>()
+        val replacement = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(811), replaces = old.id)
+        assertEquals(HttpStatusCode.Created, replacement.status)
+        assertEquals("REPLACED", query("select status from claim_files where id = ${old.id}"))
+        assertEquals("1", query("select count(*) from claim_files where claim_id = ${claim.id} and status = 'ACCEPTED'"))
+        assertEquals(HttpStatusCode.Conflict, s.upload(claim.id, "DAMAGE_PHOTO", jpeg(812), replaces = old.id).status)
+    }
+
+    @Test
+    fun concurrentReplacementsKeepOneSuccessor() = apiTest { http ->
+        val s = http.anna()
+        val claim = s.accidentDraft()
+        val old = s.upload(claim.id, "DAMAGE_PHOTO", jpeg(820)).body<ClaimFileDto>()
+        val statuses = coroutineScope {
+            val a = async { s.upload(claim.id, "DAMAGE_PHOTO", jpeg(821), replaces = old.id).status }
+            val b = async { s.upload(claim.id, "DAMAGE_PHOTO", jpeg(822), replaces = old.id).status }
+            listOf(a.await(), b.await())
+        }
+        assertEquals(1, statuses.count { it == HttpStatusCode.Created })
+        assertEquals(1, statuses.count { it == HttpStatusCode.Conflict })
+        assertEquals("1", query("select count(*) from claim_files where claim_id = ${claim.id} and status = 'ACCEPTED'"))
+        assertEquals("2", query("select count(*) from claim_files where claim_id = ${claim.id}"))
+    }
+
+    @Test
+    fun replacementCountsFinalBytesAndStillRejectsOversize() = apiTest(TestDatabase.config("files.maxTotalBytesPerClaim" to "700")) { http ->
+        val s = http.anna()
+        val claim = s.accidentDraft()
+        val old = s.upload(claim.id, "OTHER", pdf(" ".repeat(350)), name = "a.pdf").body<ClaimFileDto>()
+        val replacement = s.upload(claim.id, "OTHER", pdf(" ".repeat(400)), name = "b.pdf", replaces = old.id)
+        assertEquals(HttpStatusCode.Created, replacement.status)
+        val current = replacement.body<ClaimFileDto>()
+        val tooBig = s.upload(claim.id, "OTHER", pdf(" ".repeat(700)), name = "c.pdf", replaces = current.id)
+        assertEquals(HttpStatusCode.Conflict, tooBig.status)
+        assertEquals("ACCEPTED", query("select status from claim_files where id = ${current.id}"))
     }
 
     @Test

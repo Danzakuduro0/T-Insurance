@@ -54,8 +54,11 @@ class JobWorkerTest {
         insertJob(retryable, "RUNNING", attempts = 1, maxAttempts = 3, lockedHoursAgo = 1)
 
         worker.maintenance()
-        assertEquals("FAILED", jobStatus(exhausted))
+        assertEquals("PENDING", jobStatus(exhausted))
         assertEquals("PENDING", jobStatus(retryable))
+        worker.runReady()
+        assertEquals("FAILED", jobStatus(exhausted))
+        assertEquals("3", query("select attempts from background_jobs where dedup_key = '$exhausted'"))
     }
 
     @Test

@@ -23,7 +23,7 @@ enum class JobType(val maxAttempts: Int) {
     SEND_NOTIFICATION(5),
 }
 
-data class Job(val id: Long, val type: JobType, val payload: JsonObject, val attempts: Int, val maxAttempts: Int) {
+data class Job(val id: Long, val type: JobType, val payload: JsonObject, val attempts: Int, val maxAttempts: Int, val exhausted: Boolean = false) {
     val isLastAttempt get() = attempts >= maxAttempts
     fun long(field: String): Long = payload.getValue(field).jsonPrimitive.long
 }
@@ -64,20 +64,24 @@ object JobQueue {
     fun claim(tx: JdbcTransaction, workerId: String, limit: Int): List<Job> {
         require(workerId.all { it.isLetterOrDigit() || it == '-' }) { "workerId: только буквы, цифры и дефис" }
         val sql = """
-            update background_jobs
-               set status = 'RUNNING', locked_at = now(), locked_by = '$workerId', attempts = attempts + 1
-             where id in (select id from background_jobs
-                           where status = 'PENDING' and run_after <= now()
-                           order by run_after, id
-                           limit ${limit.coerceIn(1, 100)}
-                           for update skip locked)
-            returning id, type, payload::text, attempts, max_attempts
+            with ready as (
+                select id, attempts >= max_attempts as exhausted from background_jobs
+                 where status = 'PENDING' and run_after <= now()
+                 order by run_after, id
+                 limit ${limit.coerceIn(1, 100)}
+                 for update skip locked
+            )
+            update background_jobs j
+               set status = 'RUNNING', locked_at = now(), locked_by = '$workerId',
+                   attempts = j.attempts + case when ready.exhausted then 0 else 1 end
+              from ready where j.id = ready.id
+            returning j.id, j.type, j.payload::text, j.attempts, j.max_attempts, ready.exhausted
         """.trimIndent()
         return tx.exec(sql, explicitStatementType = StatementType.SELECT) { rs ->
             buildList {
                 while (rs.next()) {
                     val type = JobType.entries.firstOrNull { it.name == rs.getString(2) } ?: continue
-                    add(Job(rs.getLong(1), type, json.parseToJsonElement(rs.getString(3)).jsonObject, rs.getInt(4), rs.getInt(5)))
+                    add(Job(rs.getLong(1), type, json.parseToJsonElement(rs.getString(3)).jsonObject, rs.getInt(4), rs.getInt(5), rs.getBoolean(6)))
                 }
             }
         } ?: emptyList()
@@ -120,23 +124,12 @@ object JobQueue {
         }
     }
 
-    /**
-     * Задачи, «зависшие» у упавшего воркера дольше [lease], возвращаются в очередь;
-     * у которых попытки кончились — сразу FAILED, а не запускаются сверх лимита.
-     */
-    fun releaseStale(tx: JdbcTransaction, lease: Duration): Int {
-        val stale = "status = 'RUNNING' and locked_at < now() - interval '${lease.toMillis()} milliseconds'"
-        val failed = countUpdated(
-            tx,
-            "update background_jobs set status = 'FAILED', last_error = 'Воркер не завершил последнюю попытку', " +
-                "finished_at = now(), locked_at = null, locked_by = null where $stale and attempts >= max_attempts returning id",
-        )
-        val released = countUpdated(
-            tx,
-            "update background_jobs set status = 'PENDING', locked_at = null, locked_by = null where $stale returning id",
-        )
-        return failed + released
-    }
+    /** Исчерпанные задачи тоже возвращаются: воркер выполнит только giveUp, без новой попытки обработки. */
+    fun releaseStale(tx: JdbcTransaction, lease: Duration): Int = countUpdated(
+        tx,
+        "update background_jobs set status = 'PENDING', run_after = now(), locked_at = null, locked_by = null " +
+            "where status = 'RUNNING' and locked_at < now() - interval '${lease.toMillis()} milliseconds' returning id",
+    )
 
     private fun countUpdated(tx: JdbcTransaction, sql: String): Int =
         tx.exec(sql, explicitStatementType = StatementType.SELECT) { rs -> var n = 0; while (rs.next()) n++; n } ?: 0

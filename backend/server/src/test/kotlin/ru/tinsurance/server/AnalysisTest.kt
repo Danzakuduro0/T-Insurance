@@ -228,6 +228,24 @@ class AnalysisTest {
         }
     }
 
+    @Test
+    fun exhaustedStaleAnalysisFailsFileWithoutCallingMlAgain() = FakeMl().use { ml ->
+        claimFlowTest("analysis.mlUrl" to ml.url) {
+            val (claim, files) = readyClaim()
+            submit(claim.id)
+            val key = "ANALYZE_IMAGE:file:${files[0].id}"
+            sql("update background_jobs set status = 'RUNNING', attempts = max_attempts, locked_at = now() - interval '1 hour', locked_by = 'dead' where dedup_key = '$key'")
+            worker.maintenance()
+            runWorker()
+            assertEquals("FAILED", query("select status from background_jobs where dedup_key = '$key'"))
+            assertEquals("4", query("select attempts from background_jobs where dedup_key = '$key'"))
+            assertEquals("FAILED", query("select analysis_status from claim_files where id = ${files[0].id}"))
+            assertEquals("0", query("select count(*) from image_analyses where file_id = ${files[0].id}"))
+            assertEquals("QUEUED", status(claim.id))
+            assertEquals("MANUAL_REVIEW", query("select direction_code from claims where id = ${claim.id}"))
+        }
+    }
+
     // ---------------------------------------------------------------- локальная проверка и правила — без сервера
 
     @Test

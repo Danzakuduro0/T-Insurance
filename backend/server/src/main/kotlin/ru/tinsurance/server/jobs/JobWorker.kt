@@ -61,7 +61,7 @@ class JobWorker(
     suspend fun runReady(): Int {
         var processed = 0
         repeat(MAX_ROUNDS) {
-            val jobs = db.tx { JobQueue.claim(this, id, config.batchSize) }
+            val jobs = db.tx { JobQueue.claim(this, this@JobWorker.id, config.batchSize) }
             if (jobs.isEmpty()) return processed
             coroutineScope { jobs.forEach { job -> launch { permits.withPermit { process(job) } } } }
             processed += jobs.size
@@ -98,6 +98,10 @@ class JobWorker(
         val handler = handlers[job.type]
         if (handler == null) {
             db.tx { JobQueue.fail(job.id, "Нет обработчика для ${job.type}") }
+            return
+        }
+        if (job.exhausted) {
+            giveUpAndFail(handler, job, "Воркер не завершил последнюю попытку")
             return
         }
         val outcome = try {

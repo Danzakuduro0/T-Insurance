@@ -1724,6 +1724,60 @@
         }
       ],
       "description": "После выхода токены сразу перестают работать. Чтобы продолжить — снова «Вход» в разделах 1 и 2."
+    },
+    {
+      "name": "Дополнительно: удаление файла из черновика (отдельный запуск)",
+      "item": [
+        {
+          "name": "Удалить лишний файл из черновика",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobileToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{draftClaimId}}/files/{{draftFileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{draftClaimId}}",
+                "files",
+                "{{draftFileId}}"
+              ]
+            },
+            "description": "Запускайте отдельно: укажите draftClaimId и draftFileId собственного черновика. После отправки обращения удаление запрещено (409)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"draftClaimId\") || !pm.variables.get(\"draftFileId\")) {",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Файл удалён\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1785,6 +1839,14 @@
     },
     {
       "key": "myClaimId",
+      "value": ""
+    },
+    {
+      "key": "draftClaimId",
+      "value": ""
+    },
+    {
+      "key": "draftFileId",
       "value": ""
     }
   ]

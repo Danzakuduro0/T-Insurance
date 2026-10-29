@@ -103,9 +103,14 @@ class UploadService(
     /** Под блокировкой обращения: лимиты и дубли считаются без гонок. */
     private suspend fun store(target: UploadTarget, type: DocumentType, file: InspectedFile, replacesFileId: Long?): UploadResult = db.tx {
         UploadRules.uploadableClaim(target.clientId, target.claimId, forUpdate = true)
+        target.requestId?.let(FileRepository::findByRequestId)?.let { existing ->
+            if (existing[ClaimFiles.claimId] != target.claimId) throw ConflictException("clientRequestId уже использован")
+            return@tx UploadResult(UploadOutcome.ALREADY_UPLOADED, FileRepository.dto(existing[ClaimFiles.id]))
+        }
+        replacesFileId?.let { UploadRules.checkReplaceable(target.claimId, it, target.documentType) }
         val accepted = FileRepository.accepted(target.claimId)
         accepted.firstOrNull { it.sha256 == file.sha256 }?.let { same -> return@tx recorder.duplicate(target, file, same.id) }
-        checkLimits(accepted, file)
+        checkLimits(accepted.filterNot { it.id == replacesFileId }, file)
 
         val key = "${FileRepository.STORED_PREFIX}${target.claimId}/${Uuid.random()}.${file.extension}"
         storage.put(key, file.content)
