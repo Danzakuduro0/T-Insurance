@@ -16,6 +16,7 @@ import ru.tinsurance.server.claims.Actor
 import ru.tinsurance.server.claims.AuditEntity
 import ru.tinsurance.server.claims.AuditWriter
 import ru.tinsurance.server.claims.ClaimStatusService
+import ru.tinsurance.server.claims.ClaimRepository
 import ru.tinsurance.server.db.AuditLog
 import ru.tinsurance.server.db.Claims
 import java.time.OffsetDateTime
@@ -57,6 +58,13 @@ object ClaimAssigner {
             .limit(1)
             .singleOrNull()
             ?.get(AuditLog.newValue)?.jsonObject?.get("operatorId")?.jsonPrimitive?.longOrNull
+
+    fun clearForRouting(claimId: Long, at: OffsetDateTime) {
+        val previous = ClaimRepository.findForUpdate(claimId)?.get(Claims.assignedOperatorId) ?: return
+        setAssignee(claimId, null)
+        AuditWriter.record(claimId, AuditEntity.CLAIM, claimId, RELEASE, Actor.SYSTEM,
+            oldValue = operatorJson(previous), comment = "Повторная маршрутизация после уточнений", at = at)
+    }
 
     private fun setAssignee(claimId: Long, operatorId: Long?) {
         Claims.update({ Claims.id eq claimId }) { it[assignedOperatorId] = operatorId }

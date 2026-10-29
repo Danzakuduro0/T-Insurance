@@ -39,6 +39,10 @@ object OperatorApi {
     const val CLAIM_TAKE = "$CLAIM/take"
     const val CLAIM_START_REVIEW = "$CLAIM/start-review"
     const val CLAIM_RELEASE = "$CLAIM/release"
+    const val CLAIM_REQUEST_MATERIALS = "$CLAIM/request-materials"
+    const val CLAIM_REVIEW_RESULT = "$CLAIM/review-result"
+    const val CLAIM_COMPLETE = "$CLAIM/complete"
+    const val CLAIM_CANCEL = "$CLAIM/cancel"
     const val CLAIM_ASSIGN = "$CLAIM/assign"
 }
 

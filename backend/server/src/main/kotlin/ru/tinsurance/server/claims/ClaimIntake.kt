@@ -28,7 +28,9 @@ object ClaimIntake {
 
     /** Комплект полный: SUBMITTED → IN_ANALYSIS и задача ROUTE_CLAIM, которая дождётся анализа фото. */
     fun startAnalysis(claimId: Long, at: OffsetDateTime) {
-        InfoRequestRepository.closeOpen(claimId, InfoRequestStatus.FULFILLED, at)
+        if (ManualMaterialsRepository.open(claimId) == null) {
+            InfoRequestRepository.closeOpen(claimId, InfoRequestStatus.FULFILLED, at)
+        }
         ClaimStatusService.transition(
             claimId, ClaimStatus.SUBMITTED, ClaimStatus.IN_ANALYSIS, Actor.SYSTEM,
             reason = "Комплект материалов полный", at = at,
@@ -42,6 +44,11 @@ object ClaimIntake {
 
     /** Не хватает материалов: новый запрос с актуальным перечнем, обращение возвращается клиенту. */
     fun requestMaterials(claimId: Long, from: ClaimStatus, result: CompletenessResult, dueDays: Long, at: OffsetDateTime) {
+        if (ManualMaterialsRepository.open(claimId) != null) {
+            ClaimStatusService.transition(claimId, from, ClaimStatus.NEEDS_INFO, Actor.SYSTEM,
+                clientComment = "Дополните материалы по запросу оператора. ${result.summary()}", at = at)
+            return
+        }
         InfoRequestRepository.closeOpen(claimId, InfoRequestStatus.CANCELLED, at)
         InfoRequestRepository.createFromCompleteness(claimId, result, dueDays, at)
         val missing = "Не хватает: ${result.summary()}"
@@ -49,6 +56,14 @@ object ClaimIntake {
             claimId, from, ClaimStatus.NEEDS_INFO, Actor.SYSTEM,
             reason = missing, clientComment = missing, at = at,
         )
+    }
+
+    fun returnForManualMaterials(claimId: Long, at: OffsetDateTime): Boolean {
+        val missing = ManualMaterialsChecker.unfulfilled(claimId)
+        if (missing.isEmpty()) return false
+        ClaimStatusService.transition(claimId, ClaimStatus.IN_ANALYSIS, ClaimStatus.NEEDS_INFO,
+            Actor.SYSTEM, clientComment = "Выполните запрос оператора: ${missing.joinToString("; ")}", at = at)
+        return true
     }
 
     private fun completenessJson(result: CompletenessResult) = buildJsonObject {

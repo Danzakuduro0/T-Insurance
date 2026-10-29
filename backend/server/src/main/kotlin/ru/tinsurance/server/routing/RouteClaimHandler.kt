@@ -13,6 +13,8 @@ import ru.tinsurance.api.FileStatus
 import ru.tinsurance.server.analysis.AnalysisConfig
 import ru.tinsurance.server.analysis.ImageAnalysisRepository
 import ru.tinsurance.server.assignment.AutoAssigner
+import ru.tinsurance.api.InfoRequestStatus
+import ru.tinsurance.server.claims.InfoRequestRepository
 import ru.tinsurance.server.claims.ClaimIntake
 import ru.tinsurance.server.claims.ClaimRepository
 import ru.tinsurance.server.claims.ClaimsConfig
@@ -52,12 +54,14 @@ class RouteClaimHandler(
             return@tx JobOutcome.Later(analysis.routeRecheck)
         }
 
+        if (ClaimIntake.returnForManualMaterials(claimId, now)) return@tx JobOutcome.Done
         val completeness = CompletenessChecker.check(claim)
         if (!completeness.complete) {
             ClaimIntake.recordCompleteness(claimId, completeness, now)
             ClaimIntake.requestMaterials(claimId, ClaimStatus.IN_ANALYSIS, completeness, claims.infoRequestDueDays, now)
             return@tx JobOutcome.Done
         }
+        InfoRequestRepository.closeOpen(claimId, InfoRequestStatus.FULFILLED, now)
         val decision = RoutingRules.decide(RoutingInput(photos, duplicateClaimNumber(claim)), routing)
         RoutingDecisionWriter.apply(claimId, decision, photos, now)
         autoAssigner.assignQueued(claimId)
@@ -70,6 +74,8 @@ class RouteClaimHandler(
             val claimId = job.long("claimId")
             val claim = ClaimRepository.findForUpdate(claimId) ?: return@tx
             if (claim[Claims.status] != ClaimStatus.IN_ANALYSIS) return@tx
+            if (ClaimIntake.returnForManualMaterials(claimId, OffsetDateTime.now())) return@tx
+            InfoRequestRepository.closeOpen(claimId, InfoRequestStatus.FULFILLED, OffsetDateTime.now())
             val decision = RoutingDecision(
                 direction = RoutingRules.MANUAL_REVIEW, priority = 2, manualReview = true,
                 reasons = listOf("Ошибка автоматической обработки — нужна ручная проверка"),

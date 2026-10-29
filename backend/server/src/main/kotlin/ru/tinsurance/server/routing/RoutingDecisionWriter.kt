@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.update
 import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.DecisionKind
+import ru.tinsurance.server.assignment.ClaimAssigner
 import ru.tinsurance.server.claims.Actor
 import ru.tinsurance.server.claims.ClaimDecisionWriter
 import ru.tinsurance.server.claims.ClaimStatusService
@@ -39,6 +40,7 @@ object RoutingDecisionWriter {
             it[priority] = decision.priority.toShort()
             it[requiresManualReview] = decision.manualReview
         }
+        ClaimAssigner.clearForRouting(claimId, at)
         ClaimStatusService.transition(
             claimId, ClaimStatus.IN_ANALYSIS, ClaimStatus.QUEUED, Actor.SYSTEM,
             reason = decision.reasons.joinToString("; "), at = at,

@@ -107,3 +107,10 @@ The server and IntelliJ both use port 8080 — run one of them. More commands: [
 Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
 
 - Server tests: `./gradlew :server:test`
+
+### Operator actions (step 6)
+
+Assigned operators can request materials, save a review result and complete a claim in IN_REVIEW.
+Cancellation requires an internal reason and a separate client comment. Manual requests are checked again
+on resubmission and after photo analysis; existing photos cannot satisfy requests for additional images.
+API, permissions and Postman instructions: [docs/OPERATOR_ACTIONS.md](docs/OPERATOR_ACTIONS.md).

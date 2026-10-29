@@ -28,6 +28,7 @@ import ru.tinsurance.server.jobs.WorkerConfig
 import ru.tinsurance.server.mobile.MobileClaimService
 import ru.tinsurance.server.operator.DecisionReviewService
 import ru.tinsurance.server.operator.OperatorClaimService
+import ru.tinsurance.server.operator.actions.OperatorActionsService
 import ru.tinsurance.server.routing.RouteClaimHandler
 import ru.tinsurance.server.routing.RoutingConfig
 import java.time.OffsetDateTime
@@ -54,6 +55,7 @@ class AppContainer(
     private val operators = OperatorRepository(assignmentConfig.defaultMaxActiveClaims)
     private val autoAssigner = AutoAssigner(operators, assignmentConfig.autoAssign)
     val assignments = AssignmentService(database, operators, autoAssigner)
+    val operatorActions = OperatorActionsService(database, claimsConfig, filesConfig.maxFilesPerClaim, autoAssigner)
     private val sessionRetention = config.days("security.sessionRetentionDays", 30)
 
     val analysisConfig = AnalysisConfig.from(config)

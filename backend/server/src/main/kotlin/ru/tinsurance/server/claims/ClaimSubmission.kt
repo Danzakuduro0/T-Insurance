@@ -18,6 +18,7 @@ class ClaimSubmission(private val config: ClaimsConfig) {
         val status = claim[Claims.status]
         if (status != ClaimStatus.DRAFT && status != ClaimStatus.NEEDS_INFO) throw ConflictException("Обращение уже отправлено")
 
+        ManualMaterialsChecker.requireFulfilled(claimId)
         val result = CompletenessChecker.check(claim)
         if (result.missingCoreFields.isNotEmpty()) {
             throw ApiException(
