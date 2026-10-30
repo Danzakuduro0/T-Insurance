@@ -24,5 +24,8 @@ kotlin {
 
             implementation(libs.compose.ui)
         }
+        webMain.dependencies {
+            implementation(libs.wrappers.browser)
+        }
     }
 }

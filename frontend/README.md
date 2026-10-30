@@ -1,42 +1,80 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web.
+# Т-Страхование · клиентское приложение
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+Клиентские экраны на Kotlin и Compose Multiplatform для Android, iOS и Web.
+Общая вёрстка находится в `shared/src/commonMain`, платформенные точки входа используют один `App`.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+[Макет в Figma](https://www.figma.com/design/s6nhRji3xk5E3It2m9SskY/)
 
-### Running the apps
+## Запуск
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+Нужен JDK 21. Для Android установите SDK 37, для iOS — Xcode на macOS.
+Команды выполняются из папки `frontend` (в Windows используйте `gradlew.bat`).
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- Web app:
-  - Wasm target (faster, modern browsers): `./gradlew :webApp:wasmJsBrowserDevelopmentRun`
-  - JS target (slower, supports older browsers): `./gradlew :webApp:jsBrowserDevelopmentRun`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+```bash
+./gradlew :androidApp:assembleDebug
+./gradlew :webApp:wasmJsBrowserDevelopmentRun
+# Другой вариант Web:
+./gradlew :webApp:jsBrowserDevelopmentRun
+```
 
-### Running tests
+Для iOS откройте `iosApp/iosApp.xcodeproj` в Xcode.
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+## Экраны
 
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- Web tests:
-  - Wasm target: `./gradlew :shared:wasmJsTest`
-  - JS target: `./gradlew :shared:jsTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+[Предпросмотр всех 12 экранов](docs/client-screens.png)
 
----
+| № | Экран | Функция | Ссылка в Web |
+|---|---|---|---|
+| 01 | Мои обращения | `ClaimsScreen` | `#Claims` |
+| 02 | Договор и тип события | `ContractScreen` | `#Contract` |
+| 03 | Обстоятельства и контакты | `EventScreen` | `#Event` |
+| 04 | Фото и документы | `MaterialsScreen` | `#Materials` |
+| 05 | Проверка качества фото | `PhotoQualityScreen` | `#PhotoQuality` |
+| 06 | Проверка перед отправкой | `ReviewScreen` | `#Review` |
+| 07 | Обращение отправлено | `SentScreen` | `#Sent` |
+| 08 | Ход обработки | `ProgressScreen` | `#Progress` |
+| 09 | Запрос дополнительных материалов | `RequestScreen` | `#Request` |
+| 10 | Ответ на запрос | `ReplyScreen` | `#Reply` |
+| 11 | Обработка завершена | `CompletedScreen` | `#Completed` |
+| 12 | Центр уведомлений | `NotificationsScreen` | `#Notifications` |
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://kotlinlang.org/compose-multiplatform/),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
+Добавьте нужный фрагмент к адресу открытого Web-приложения, например `/#Review`.
+В `client/ClientPreviews.kt` также есть отдельный `@Preview` 390 × 844 для каждого экрана.
 
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+## Как устроен код
+
+- `App.kt` — переходы между экранами и локальное состояние сценария.
+- `client/` — обычные Compose-функции экранов, черновик и проверка полей.
+- `ui/` — тема, кнопки, поля, карточки, шапка и нижнее меню.
+- `PlatformFiles.*.kt` — камера, сохранение PDF и системная кнопка «Назад».
+- `composeResources/` — изображения и иконки из Figma, шрифт Inter и два учебных PDF.
+
+Поля, вкладки, выбор договора, чекбоксы, просмотр обращений и уведомления работают.
+Черновик хранится через `rememberSaveable`: введённые значения не теряются при переходах между экранами.
+На узком экране содержимое прокручивается, нижняя кнопка остаётся доступной; учитываются системные отступы и клавиатура.
+
+FileKit открывает системный выбор файлов на всех платформах. Камера работает на Android/iOS;
+в браузере эта кнопка открывает выбор изображения. Принимаются JPEG, PNG и PDF: до 20 МБ на файл,
+10 файлов и 100 МБ на обращение. Повторно выбранные файлы сравниваются по содержимому.
+
+## Тестовые данные
+
+Это вёрстка с локальным демонстрационным сценарием. Отправка заявления и дополнения меняет состояние интерфейса,
+но не отправляет запросы в backend. Статусы и предупреждение о тёмном фото взяты из макета;
+новые фото не проходят ML-проверку. Вкладки «Полисы» и «Профиль» открывают диалоги, поскольку отдельных
+клиентских экранов для них в макете нет.
+
+Вложения с устройства хранятся в памяти текущего запуска. После перезапуска их нужно выбрать заново.
+Скачиваемые PDF — помеченные учебные образцы, а не документы, сформированные сервером.
+Inter распространяется по SIL Open Font License; текст лицензии находится в `composeResources/files/inter_OFL.txt`.
+
+## Проверка
+
+```bash
+./gradlew :shared:compileKotlinJs :shared:compileKotlinWasmJs
+./gradlew :shared:jsBrowserTest
+./gradlew :androidApp:assembleDebug
+```
+
+Для браузерных тестов нужен Chrome/Chromium. `ClaimValidationTest` проверяет календарные даты,
+обязательные поля, адрес почты и ограничения вложений.
