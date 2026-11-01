@@ -15,6 +15,7 @@ import ru.tinsurance.server.common.ValidationException
 import ru.tinsurance.server.db.ClaimStatusHistory
 import ru.tinsurance.server.db.ClaimStatuses
 import ru.tinsurance.server.db.Claims
+import ru.tinsurance.server.notifications.StatusNotifications
 import java.time.OffsetDateTime
 
 /** Единственное место, где меняется статус обращения. Вызывается внутри транзакции. */
@@ -50,6 +51,9 @@ object ClaimStatusService {
             visible = visibleToClient ?: isVisibleToClient(to),
             reason = reason, clientTitle = clientTitle, clientComment = clientComment, at = at,
         )
+        if (visibleToClient ?: isVisibleToClient(to)) {
+            StatusNotifications.create(claimId, to, clientTitle, clientComment, at)
+        }
         AuditWriter.record(
             claimId, AuditEntity.CLAIM, claimId, "STATUS_CHANGE", actor,
             newValue = JsonPrimitive(to.name), oldValue = JsonPrimitive(from.name), comment = reason, at = at,

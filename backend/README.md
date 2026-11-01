@@ -114,3 +114,7 @@ Assigned operators can request materials, save a review result and complete a cl
 Cancellation requires an internal reason and a separate client comment. Manual requests are checked again
 on resubmission and after photo analysis; existing photos cannot satisfy requests for additional images.
 API, permissions and Postman instructions: [docs/OPERATOR_ACTIONS.md](docs/OPERATOR_ACTIONS.md).
+
+## Шаг 7: уведомления
+
+Реализованы атомарное создание уведомлений при смене статуса, клиентский API и фоновая имитация PUSH/SMS. Подробности: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md).

@@ -10,6 +10,8 @@ object MobileApi {
     const val REFRESH = "$BASE/auth/refresh"
     const val LOGOUT = "$BASE/auth/logout"
     const val ME = "$BASE/me"
+    const val NOTIFICATIONS = "$BASE/notifications"
+    const val NOTIFICATION_READ = "$NOTIFICATIONS/{id}/read"
     const val POLICIES = "$BASE/policies"
     const val EVENT_TYPES = "$BASE/event-types"
     const val CLAIMS = "$BASE/claims"

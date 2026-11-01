@@ -255,7 +255,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 ## Тесты
 
-Лежат в `server/src/test/kotlin/…`. Запуск: `./gradlew :server:test` (104 теста, Docker не нужен).
+Лежат в `server/src/test/kotlin/…`. Запуск: `./gradlew :server:test` (Docker не нужен; актуальный результат — в server/build/reports/tests/test).
 
 | Файл | Что проверяет |
 |---|---|
@@ -282,7 +282,6 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 | Шаг | Что | Решения, принятые заранее |
 |---|---|---|
-| 7 | Уведомления | Создаются в `ClaimStatusService.transition` в той же транзакции, что и переход. Какие статусы уведомляют, задаётся отдельно: не каждый видимый клиенту переход стоит push. Доставку выполняет воркер |
 | 8 | Администрирование | `GET /api/operator/dashboard` по `queue_load` / `operator_load`: признак перегрузки по порогу, рекомендации, средние сроки |
 | 9 | OpenAPI-описание, хранилище S3 | |
 | 10 | Нагрузочный профиль, сценарий демо | |
@@ -303,3 +302,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 Запрос уточнений, REVIEW_RESULT, завершение и закрытие — [OPERATOR_ACTIONS.md](OPERATOR_ACTIONS.md).
 `OperatorActionsTest` проверяет права, запросы фото/полей, сохранение запроса после плохого анализа,
 историю итогов, одновременное завершение и освобождение места для следующего обращения.
+
+## Шаг 7: уведомления
+
+Реализованы атомарное создание уведомлений при смене статуса, клиентский API и фоновая имитация PUSH/SMS. Подробности: [NOTIFICATIONS.md](NOTIFICATIONS.md).
