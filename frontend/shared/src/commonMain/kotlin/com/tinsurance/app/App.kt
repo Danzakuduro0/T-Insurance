@@ -50,6 +50,9 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
         val client = viewModel { ClientViewModel() }
         // В @Preview нет backend: показываем пример списка без входа.
         val claims = if (inspection) PreviewClaims else client.claims
+        // Открыто настоящее обращение из списка; иначе экраны показывают сценарий макета.
+        val realClaim = !inspection && client.claim.id != null
+        val claimPolicy = claims.policies.find { it.id == client.claim.details?.policyId }
         LaunchedEffect(screen, client.user) {
             if (screen == ClientScreen.Claims && client.user != null) client.loadClaims()
         }
@@ -221,9 +224,12 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                                     tab = claimsTab,
                                     onTab = { claimsTab = it },
                                     onNew = { open(ClientScreen.Contract) },
-                                    // Экраны обращения пока показывают данные макета.
+                                    // «Ход обработки» и «Завершено» — из API, остальные пока по макету.
                                     onOpen = { claim ->
                                         claimNumber = claim.claimNumber
+                                        client.openClaim(
+                                            claim.id.takeIf { claim.status != ClaimStatus.DRAFT }
+                                        )
                                         open(
                                             when {
                                                 claim.status == ClaimStatus.DRAFT ->
@@ -268,13 +274,22 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                                 )
                             ClientScreen.Sent -> SentScreen(claimNumber)
                             ClientScreen.Progress ->
-                                ProgressScreen(
-                                    shownDraft,
-                                    repliedClaim == claimNumber,
-                                    onMaterials = { dialog = "materials" },
-                                    onDetails = { dialog = "details" },
-                                    onReply = { open(ClientScreen.Reply) },
-                                )
+                                if (realClaim)
+                                    ClaimProgressScreen(
+                                        client.claim,
+                                        claimPolicy,
+                                        onMaterials = { dialog = "materials" },
+                                        onDetails = { dialog = "details" },
+                                        onRetry = client::reloadClaim,
+                                    )
+                                else
+                                    ProgressScreen(
+                                        shownDraft,
+                                        repliedClaim == claimNumber,
+                                        onMaterials = { dialog = "materials" },
+                                        onDetails = { dialog = "details" },
+                                        onReply = { open(ClientScreen.Reply) },
+                                    )
                             ClientScreen.Request -> RequestScreen()
                             ClientScreen.Reply ->
                                 ReplyScreen(
@@ -285,12 +300,16 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                                     onUpload = pickFiles,
                                     onDocument = { saveDocument(false) },
                                 )
-                            ClientScreen.Completed -> CompletedScreen { saveDocument(true) }
+                            ClientScreen.Completed ->
+                                if (realClaim)
+                                    ClaimCompletedScreen(client.claim, client::reloadClaim)
+                                else CompletedScreen { saveDocument(true) }
                             ClientScreen.Notifications ->
                                 NotificationsScreen(
                                     readNotifications,
                                     { readNotifications = true },
                                 ) { next ->
+                                    client.openClaim(null)
                                     claimNumber = "ТС-10428"
                                     open(next)
                                 }
@@ -347,7 +366,11 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                     ClientScreen.Sent ->
                         ActionFooter(
                             "Следить за обращением",
-                            { open(ClientScreen.Progress) },
+                            {
+                                // Отправка пока локальная: показываем демо-ход обработки.
+                                client.openClaim(null)
+                                open(ClientScreen.Progress)
+                            },
                             link = "К списку обращений",
                             onLink = ::home,
                         )
@@ -377,6 +400,7 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                 if (dialog == "details") shownDraft else draft,
                 user = client.user,
                 policies = claims.policies,
+                claim = client.claim.details.takeIf { realClaim },
                 onLogout = {
                     dialog = null
                     home()

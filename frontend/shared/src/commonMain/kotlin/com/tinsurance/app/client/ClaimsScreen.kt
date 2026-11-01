@@ -105,7 +105,7 @@ private fun ClaimCard(claim: ClaimListItem, onClick: () -> Unit) {
     }
 }
 
-private fun statusColors(status: ClaimStatus): Pair<Color, Color> =
+fun statusColors(status: ClaimStatus): Pair<Color, Color> =
     when (status) {
         ClaimStatus.NEEDS_INFO -> InsuranceColors.AmberSoft to InsuranceColors.Amber
         ClaimStatus.COMPLETED -> InsuranceColors.GreenSoft to InsuranceColors.Green
@@ -142,4 +142,11 @@ fun formatDate(iso: String, withYear: Boolean = false): String {
     if (year == null || month !in 1..12 || day == null) return iso
     val text = "$day ${monthsGenitive[month!! - 1]}"
     return if (withYear) "$text $year" else text
+}
+
+/** "2026-10-17T18:35:00+07:00" → "17 октября, 18:35" (время в поясе, который прислал сервер). */
+fun formatDateTime(iso: String): String {
+    val time = iso.drop(11).take(5)
+    val date = formatDate(iso)
+    return if (Regex("[0-9]{2}:[0-9]{2}").matches(time) && date != iso) "$date, $time" else date
 }
