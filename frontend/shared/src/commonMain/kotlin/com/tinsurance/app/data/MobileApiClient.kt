@@ -23,7 +23,9 @@ import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import ru.tinsurance.api.*
+import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.TimelineEvent
 
 /** Сообщение для клиента уже на русском: из ErrorResponse сервера или общее. */
 class ApiException(val status: Int, message: String) : Exception(message) {
@@ -113,6 +115,14 @@ class MobileApiClient(
     suspend fun policies(): List<PolicyDto> = call { http.get(path(MobileApi.POLICIES)).body() }
 
     suspend fun claims(): List<ClaimListItem> = call { http.get(path(MobileApi.CLAIMS)).body() }
+
+    suspend fun claim(id: Long): ClaimDetails = call { http.get(claimPath(MobileApi.CLAIM, id)).body() }
+
+    suspend fun timeline(id: Long): List<TimelineEvent> = call {
+        http.get(claimPath(MobileApi.CLAIM_TIMELINE, id)).body()
+    }
+
+    private fun claimPath(apiPath: String, id: Long) = path(apiPath.replace("{id}", id.toString()))
 
     private suspend fun <T> call(block: suspend () -> T): T =
         try {

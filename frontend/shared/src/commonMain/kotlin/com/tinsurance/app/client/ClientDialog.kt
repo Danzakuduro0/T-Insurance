@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.tinsurance.app.ui.*
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
+import ru.tinsurance.api.mobile.ClaimDetails
 import tinsurance.shared.generated.resources.*
 
 @Composable
@@ -19,6 +20,8 @@ fun ClientDialog(
     draft: ClaimDraft,
     user: UserDto? = null,
     policies: List<PolicyDto> = emptyList(),
+    /** Настоящее обращение для «Материалов» и «Сведений»; null — данные макета. */
+    claim: ClaimDetails? = null,
     onLogout: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
@@ -118,18 +121,38 @@ fun ClientDialog(
                         if (onLogout != null && user != null) TextLink("Выйти", onLogout)
                     }
                     "photo" -> DamagePhoto(modifier = Modifier.fillMaxWidth().height(220.dp))
-                    "materials" -> {
-                        DamagePhoto(modifier = Modifier.fillMaxWidth().height(140.dp))
-                        Label("4 фото и 1 PDF")
-                        Caption("Извещение_ДТП.pdf")
-                    }
-                    else -> {
-                        Label("${draft.car} · КАСКО ${draft.policy}")
-                        Caption("${draft.date}, ${draft.time}")
-                        Caption(draft.location)
-                        Text(draft.description)
-                        Caption(draft.email)
-                    }
+                    "materials" ->
+                        if (claim != null) {
+                            val files = claim.visibleFiles
+                            if (files.isEmpty()) Caption("Файлов пока нет")
+                            for (file in files) {
+                                InfoRow(
+                                    Res.drawable.file,
+                                    file.originalName,
+                                    "${file.documentTypeName} · ${formatDate(file.uploadedAt)}",
+                                )
+                            }
+                        } else {
+                            DamagePhoto(modifier = Modifier.fillMaxWidth().height(140.dp))
+                            Label("4 фото и 1 PDF")
+                            Caption("Извещение_ДТП.pdf")
+                        }
+                    else ->
+                        if (claim != null) {
+                            val car = policies.find { it.id == claim.policyId }?.carName
+                            Label(listOfNotNull(car, claim.policyNumber).joinToString(" · "))
+                            Caption(claim.eventTypeName ?: "Тип события не указан")
+                            claim.eventAt?.let { Caption(formatDateTime(it)) }
+                            claim.eventLocation?.let { Caption(it) }
+                            claim.description?.let { Text(it) }
+                            claim.contactPhone?.let { Caption(it) }
+                        } else {
+                            Label("${draft.car} · КАСКО ${draft.policy}")
+                            Caption("${draft.date}, ${draft.time}")
+                            Caption(draft.location)
+                            Text(draft.description)
+                            Caption(draft.email)
+                        }
                 }
             }
         },

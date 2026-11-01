@@ -8,13 +8,16 @@ import androidx.lifecycle.viewModelScope
 import com.tinsurance.app.data.ApiException
 import com.tinsurance.app.data.MobileApiClient
 import com.tinsurance.app.data.normalizePhone
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
+import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.TimelineEvent
 
 data class LoginState(val loading: Boolean = false, val error: String? = null)
 
@@ -29,6 +32,15 @@ data class ClaimsState(
     val completed get() = claims.filter { it.isFinal }
 }
 
+/** Открытое обращение: экраны «Ход обработки» и «Обработка завершена». */
+data class ClaimState(
+    val id: Long? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
+    val details: ClaimDetails? = null,
+    val timeline: List<TimelineEvent> = emptyList(),
+)
+
 class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : ViewModel() {
     var user by mutableStateOf<UserDto?>(null)
         private set
@@ -38,6 +50,37 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
 
     var claims by mutableStateOf(ClaimsState())
         private set
+
+    var claim by mutableStateOf(ClaimState())
+        private set
+
+    private var claimJob: Job? = null
+
+    /** null — демо-сценарий макета (например, после отправки локального черновика). */
+    fun openClaim(id: Long?) {
+        claimJob?.cancel()
+        claim = ClaimState(id = id, loading = id != null)
+        if (id == null) return
+        claimJob =
+            viewModelScope.launch {
+                claim =
+                    try {
+                        coroutineScope {
+                            val details = async { api.claim(id) }
+                            val timeline = async { api.timeline(id) }
+                            ClaimState(id, details = details.await(), timeline = timeline.await())
+                        }
+                    } catch (e: ApiException) {
+                        if (e.unauthorized) {
+                            user = null
+                            login = LoginState(error = e.message)
+                        }
+                        ClaimState(id, error = e.message)
+                    }
+            }
+    }
+
+    fun reloadClaim() = openClaim(claim.id)
 
     fun login(phone: String, password: String) {
         if (login.loading) return
@@ -62,6 +105,7 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         viewModelScope.launch { api.logout() }
         user = null
         claims = ClaimsState()
+        openClaim(null)
     }
 
     fun loadClaims() {
