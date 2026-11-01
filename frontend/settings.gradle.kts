@@ -27,6 +27,13 @@ dependencyResolutionManagement {
     }
 }
 
+// Общие модели API (DTO, статусы, пути) из backend/core.
+includeBuild("../backend") {
+    dependencySubstitution {
+        substitute(module("ru.tinsurance:core")).using(project(":core"))
+    }
+}
+
 include(":androidApp")
 include(":shared")
 include(":webApp")

@@ -6,6 +6,11 @@
 	<string>Light</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна, чтобы добавить фотографии повреждения к обращению.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 </dict>

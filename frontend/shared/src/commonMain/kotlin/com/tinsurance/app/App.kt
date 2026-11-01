@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tinsurance.app.client.*
 import com.tinsurance.app.ui.*
 import io.github.vinceglb.filekit.PlatformFile
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
+import ru.tinsurance.api.ClaimStatus
 import tinsurance.shared.generated.resources.*
 
 @OptIn(ExperimentalResourceApi::class)
@@ -41,11 +43,16 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
         var claimsTab by rememberSaveable { mutableStateOf(0) }
         var materialTab by rememberSaveable { mutableStateOf(0) }
         var readNotifications by rememberSaveable { mutableStateOf(false) }
-        var submitted by rememberSaveable { mutableStateOf(false) }
         var repliedClaim by rememberSaveable { mutableStateOf("") }
         val demoDraft = remember { ClaimDraft() }
         val shownDraft = if (claimNumber == "ТС-10429") draft else demoDraft
         val inspection = LocalInspectionMode.current
+        val client = viewModel { ClientViewModel() }
+        // В @Preview нет backend: показываем пример списка без входа.
+        val claims = if (inspection) PreviewClaims else client.claims
+        LaunchedEffect(screen, client.user) {
+            if (screen == ClientScreen.Claims && client.user != null) client.loadClaims()
+        }
         var errors by remember { mutableStateOf(emptyMap<String, String>()) }
         var attachments by remember { mutableStateOf(emptyList<Attachment>()) }
         var photoReplaced by remember { mutableStateOf(false) }
@@ -188,6 +195,10 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                     .background(Color.White)
             ) {
                 if (showStatusBar) PreviewStatusBar()
+                if (!inspection && client.user == null) {
+                    LoginScreen(client.login, client::login)
+                    return@Column
+                }
                 when (screen) {
                     ClientScreen.Claims,
                     ClientScreen.Notifications ->
@@ -206,24 +217,25 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                         when (screen) {
                             ClientScreen.Claims ->
                                 ClaimsScreen(
+                                    state = claims,
                                     tab = claimsTab,
                                     onTab = { claimsTab = it },
                                     onNew = { open(ClientScreen.Contract) },
-                                    onProgress = { number ->
-                                        claimNumber = number
-                                        open(ClientScreen.Progress)
-                                    },
-                                    onRequest = {
-                                        claimNumber = "ТС-10410"
-                                        open(ClientScreen.Request)
-                                    },
-                                    onCompleted = {
-                                        claimNumber = "ТС-10386"
-                                        open(ClientScreen.Completed)
+                                    // Экраны обращения пока показывают данные макета.
+                                    onOpen = { claim ->
+                                        claimNumber = claim.claimNumber
+                                        open(
+                                            when {
+                                                claim.status == ClaimStatus.DRAFT ->
+                                                    ClientScreen.Contract
+                                                claim.actionRequired -> ClientScreen.Request
+                                                claim.isFinal -> ClientScreen.Completed
+                                                else -> ClientScreen.Progress
+                                            }
+                                        )
                                     },
                                     onPolicies = { dialog = "policies" },
-                                    replySent = repliedClaim == "ТС-10410",
-                                    submitted = submitted,
+                                    onRetry = client::loadClaims,
                                 )
                             ClientScreen.Contract -> ContractScreen(draft) { dialog = "policy" }
                             ClientScreen.Event ->
@@ -327,7 +339,6 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                         ActionFooter(
                             "Отправить обращение",
                             {
-                                submitted = true
                                 claimNumber = "ТС-10429"
                                 open(ClientScreen.Sent)
                             },
@@ -361,7 +372,19 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
             }
         }
         if (dialog != null)
-            ClientDialog(dialog!!, if (dialog == "details") shownDraft else draft) { dialog = null }
+            ClientDialog(
+                dialog!!,
+                if (dialog == "details") shownDraft else draft,
+                user = client.user,
+                policies = claims.policies,
+                onLogout = {
+                    dialog = null
+                    home()
+                    client.logout()
+                },
+            ) {
+                dialog = null
+            }
         if (message != null) {
             AlertDialog(
                 onDismissRequest = { message = null },

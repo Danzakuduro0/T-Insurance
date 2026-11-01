@@ -9,10 +9,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tinsurance.app.ui.*
+import ru.tinsurance.api.PolicyDto
+import ru.tinsurance.api.UserDto
 import tinsurance.shared.generated.resources.*
 
 @Composable
-fun ClientDialog(type: String, draft: ClaimDraft, onDismiss: () -> Unit) {
+fun ClientDialog(
+    type: String,
+    draft: ClaimDraft,
+    user: UserDto? = null,
+    policies: List<PolicyDto> = emptyList(),
+    onLogout: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
     var policy by remember { mutableStateOf(draft.policy) }
     var participants by remember { mutableStateOf(draft.participants) }
     var injured by remember { mutableStateOf(draft.injured) }
@@ -76,26 +85,37 @@ fun ClientDialog(type: String, draft: ClaimDraft, onDismiss: () -> Unit) {
                         )
                         InsuranceCheckbox("Есть пострадавшие", injured, { injured = it })
                     }
-                    "policies" -> {
-                        InfoRow(
-                            Res.drawable.shield_small,
-                            "Kia Rio 2019",
-                            "КАСКО · TEST-0421 · до 31.12.2026",
-                        )
-                        InfoRow(
-                            Res.drawable.shield_small,
-                            "Hyundai Solaris 2020",
-                            "КАСКО · TEST-0783 · до 31.12.2026",
-                        )
-                    }
+                    "policies" ->
+                        if (policies.isNotEmpty()) {
+                            for (policy in policies) {
+                                InfoRow(
+                                    Res.drawable.shield_small,
+                                    policy.carName,
+                                    "${productName(policy.product)} · ${policy.policyNumber} · до " +
+                                        formatDate(policy.validTo, withYear = true),
+                                )
+                            }
+                        } else {
+                            InfoRow(
+                                Res.drawable.shield_small,
+                                "Kia Rio 2019",
+                                "КАСКО · TEST-0421 · до 31.12.2026",
+                            )
+                            InfoRow(
+                                Res.drawable.shield_small,
+                                "Hyundai Solaris 2020",
+                                "КАСКО · TEST-0783 · до 31.12.2026",
+                            )
+                        }
                     "profile" -> {
-                        Label("Анна Смирнова")
-                        Caption(draft.email)
+                        Label(user?.fullName ?: "Анна Смирнова")
+                        Caption(user?.phone ?: draft.email)
                         InsuranceCheckbox(
                             "Уведомления в приложении",
                             draft.notifications,
                             { draft.notifications = it },
                         )
+                        if (onLogout != null && user != null) TextLink("Выйти", onLogout)
                     }
                     "photo" -> DamagePhoto(modifier = Modifier.fillMaxWidth().height(220.dp))
                     "materials" -> {
