@@ -56,6 +56,13 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
+            implementation(libs.ktor.clientOkhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.clientDarwin)
+        }
+        webMain.dependencies {
+            implementation(libs.ktor.clientJs)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -67,9 +74,16 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.filekit.dialogs.compose)
+            api(libs.tinsurance.core)
+            implementation(libs.ktor.clientCore)
+            implementation(libs.ktor.clientAuth)
+            implementation(libs.ktor.clientContentNegotiation)
+            implementation(libs.ktor.serializationKotlinxJson)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.ktor.clientMock)
+            implementation(libs.kotlinx.coroutinesTest)
         }
         jsMain.dependencies {
             implementation(libs.wrappers.browser)

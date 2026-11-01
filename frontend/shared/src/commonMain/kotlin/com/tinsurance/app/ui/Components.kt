@@ -28,6 +28,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -262,6 +264,7 @@ fun InsuranceField(
     multiline: Boolean = false,
     keyboard: KeyboardType = KeyboardType.Text,
     error: String? = null,
+    password: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Caption(label)
@@ -289,7 +292,10 @@ fun InsuranceField(
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = InsuranceColors.Ink),
             cursorBrush = SolidColor(InsuranceColors.Blue),
             singleLine = !multiline,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+            keyboardOptions =
+                KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
+            visualTransformation =
+                if (password) PasswordVisualTransformation() else VisualTransformation.None,
             decorationBox = { input -> Box(contentAlignment = Alignment.CenterStart) { input() } },
         )
         if (error != null) Caption(error, color = InsuranceColors.Red)
