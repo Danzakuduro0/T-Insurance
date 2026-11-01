@@ -31,6 +31,9 @@ import ru.tinsurance.server.operator.OperatorClaimService
 import ru.tinsurance.server.operator.actions.OperatorActionsService
 import ru.tinsurance.server.routing.RouteClaimHandler
 import ru.tinsurance.server.routing.RoutingConfig
+import ru.tinsurance.server.notifications.NotificationService
+import ru.tinsurance.server.notifications.SendNotificationHandler
+import ru.tinsurance.server.notifications.SimulatedNotificationSender
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
@@ -45,6 +48,7 @@ class AppContainer(
     private val filesConfig = FilesConfig.from(config)
     private val storage = LocalFileStorage(filesConfig.storageDir)
 
+    val notifications = NotificationService(database)
     val auth = AuthService(database, tokens, LoginThrottle(LoginThrottleConfig.from(config)))
     val mobileClaims = MobileClaimService(database, claimsConfig)
     val operatorClaims = OperatorClaimService(database, timeZone)
@@ -63,6 +67,7 @@ class AppContainer(
     val jobWorker = JobWorker(
         database,
         handlers = listOf(
+            SendNotificationHandler(database, SimulatedNotificationSender()),
             AnalyzeImageHandler(database, imageAnalyzer(), analysisConfig),
             RouteClaimHandler(database, analysisConfig, RoutingConfig.from(config), claimsConfig, autoAssigner),
         ),

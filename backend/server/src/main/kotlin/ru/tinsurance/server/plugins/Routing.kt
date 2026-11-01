@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 import ru.tinsurance.server.AppContainer
 import ru.tinsurance.server.common.tx
 import ru.tinsurance.server.mobile.mobileRoutes
+import ru.tinsurance.server.notifications.notificationRoutes
 import ru.tinsurance.server.operator.operatorRoutes
 
 @Serializable
@@ -22,6 +23,7 @@ fun Application.configureRouting(app: AppContainer) {
             }
             call.respond(HealthResponse(status = "UP", schemaVersion = schemaVersion))
         }
+        notificationRoutes(app.notifications)
         mobileRoutes(app.auth, app.mobileClaims, app.uploads, app.fileAccess)
         operatorRoutes(app.auth, app.operatorClaims, app.decisions, app.assignments, app.fileAccess, app.operatorActions)
     }
