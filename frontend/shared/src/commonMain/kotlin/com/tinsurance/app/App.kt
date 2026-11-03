@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import ru.tinsurance.api.ClaimStatus
+import ru.tinsurance.api.mobile.ClaimListItem
 import tinsurance.shared.generated.resources.*
 
 @OptIn(ExperimentalResourceApi::class)
@@ -42,7 +43,6 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
         var claimNumber by rememberSaveable { mutableStateOf("ТС-10428") }
         var claimsTab by rememberSaveable { mutableStateOf(0) }
         var materialTab by rememberSaveable { mutableStateOf(0) }
-        var readNotifications by rememberSaveable { mutableStateOf(false) }
         var repliedClaim by rememberSaveable { mutableStateOf("") }
         val demoDraft = remember { ClaimDraft() }
         val shownDraft = if (claimNumber == "ТС-10429") draft else demoDraft
@@ -50,11 +50,20 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
         val client = viewModel { ClientViewModel() }
         // В @Preview нет backend: показываем пример списка без входа.
         val claims = if (inspection) PreviewClaims else client.claims
+        val notifications = if (inspection) PreviewNotifications else client.notifications
         // Открыто настоящее обращение из списка; иначе экраны показывают сценарий макета.
         val realClaim = !inspection && client.claim.id != null
         val claimPolicy = claims.policies.find { it.id == client.claim.details?.policyId }
         LaunchedEffect(screen, client.user) {
-            if (screen == ClientScreen.Claims && client.user != null) client.loadClaims()
+            if (client.user == null) return@LaunchedEffect
+            when (screen) {
+                ClientScreen.Claims -> {
+                    client.loadClaims()
+                    client.refreshUnreadCount()
+                }
+                ClientScreen.Notifications -> client.loadNotifications()
+                else -> {}
+            }
         }
         var errors by remember { mutableStateOf(emptyMap<String, String>()) }
         var attachments by remember { mutableStateOf(emptyList<Attachment>()) }
@@ -89,6 +98,20 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
         fun edit(next: ClientScreen) {
             editingReview = true
             open(next)
+        }
+
+        // «Ход обработки» и «Завершено» — из API, остальные экраны обращения пока по макету.
+        fun openListedClaim(claim: ClaimListItem) {
+            claimNumber = claim.claimNumber
+            client.openClaim(claim.id.takeIf { claim.status != ClaimStatus.DRAFT })
+            open(
+                when {
+                    claim.status == ClaimStatus.DRAFT -> ClientScreen.Contract
+                    claim.actionRequired -> ClientScreen.Request
+                    claim.isFinal -> ClientScreen.Completed
+                    else -> ClientScreen.Progress
+                }
+            )
         }
 
         fun continueForm(next: ClientScreen) {
@@ -205,7 +228,11 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                 when (screen) {
                     ClientScreen.Claims,
                     ClientScreen.Notifications ->
-                        BrandHeader({ open(ClientScreen.Notifications) }, { dialog = "profile" })
+                        BrandHeader(
+                            { open(ClientScreen.Notifications) },
+                            { dialog = "profile" },
+                            unread = notifications.unreadCount,
+                        )
                     ClientScreen.Contract -> BackHeader("", ::back, step = 1)
                     ClientScreen.Event -> BackHeader("", ::back, step = 2)
                     ClientScreen.Materials -> BackHeader("", ::back, step = 3)
@@ -224,22 +251,7 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                                     tab = claimsTab,
                                     onTab = { claimsTab = it },
                                     onNew = { open(ClientScreen.Contract) },
-                                    // «Ход обработки» и «Завершено» — из API, остальные пока по макету.
-                                    onOpen = { claim ->
-                                        claimNumber = claim.claimNumber
-                                        client.openClaim(
-                                            claim.id.takeIf { claim.status != ClaimStatus.DRAFT }
-                                        )
-                                        open(
-                                            when {
-                                                claim.status == ClaimStatus.DRAFT ->
-                                                    ClientScreen.Contract
-                                                claim.actionRequired -> ClientScreen.Request
-                                                claim.isFinal -> ClientScreen.Completed
-                                                else -> ClientScreen.Progress
-                                            }
-                                        )
-                                    },
+                                    onOpen = ::openListedClaim,
                                     onPolicies = { dialog = "policies" },
                                     onRetry = client::loadClaims,
                                 )
@@ -306,13 +318,23 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                                 else CompletedScreen { saveDocument(true) }
                             ClientScreen.Notifications ->
                                 NotificationsScreen(
-                                    readNotifications,
-                                    { readNotifications = true },
-                                ) { next ->
-                                    client.openClaim(null)
-                                    claimNumber = "ТС-10428"
-                                    open(next)
-                                }
+                                    notifications,
+                                    claims.claims.associate { it.id to it.claimNumber },
+                                    onReadAll = client::markAllRead,
+                                    onOpen = { item ->
+                                        client.markRead(item.id)
+                                        val claimId = item.claimId ?: return@NotificationsScreen
+                                        val listed = claims.claims.find { it.id == claimId }
+                                        if (listed != null) openListedClaim(listed)
+                                        else {
+                                            // Списка ещё нет (сразу после входа): статус узнаем на экране.
+                                            client.openClaim(claimId)
+                                            open(ClientScreen.Progress)
+                                        }
+                                    },
+                                    onMore = client::loadMoreNotifications,
+                                    onRetry = client::loadNotifications,
+                                )
                         }
                     }
                 }
@@ -326,6 +348,7 @@ fun App(showStatusBar: Boolean = false, initialScreen: ClientScreen = ClientScre
                             onPolicies = { dialog = "policies" },
                             onNotifications = { open(ClientScreen.Notifications) },
                             onProfile = { dialog = "profile" },
+                            unread = notifications.unreadCount,
                         )
                     ClientScreen.Contract ->
                         ActionFooter("Продолжить", { continueForm(ClientScreen.Event) })

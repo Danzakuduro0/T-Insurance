@@ -10,57 +10,64 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tinsurance.app.ui.*
 import org.jetbrains.compose.resources.DrawableResource
+import ru.tinsurance.api.mobile.NotificationDto
 import tinsurance.shared.generated.resources.*
 
+/** Тип уведомления с backend: запрос материалов — отдельный цвет и иконка. */
+private const val DocumentsRequired = "DOCUMENTS_REQUIRED"
+
 @Composable
-fun NotificationsScreen(read: Boolean, onReadAll: () -> Unit, onOpen: (ClientScreen) -> Unit) {
+fun NotificationsScreen(
+    state: NotificationsState,
+    claimNumbers: Map<Long, String>,
+    onReadAll: () -> Unit,
+    onOpen: (NotificationDto) -> Unit,
+    onMore: () -> Unit,
+    onRetry: () -> Unit,
+) {
     ScreenBody {
         PageTitle("Уведомления")
-        TextLink(if (read) "Все уведомления прочитаны" else "Прочитать все", onReadAll)
-        Label("Сегодня")
-        NotificationCard(
-            "Обработка завершена",
-            "ТС-10428 · Открыть сводку обращения",
-            "15:20",
-            Res.drawable.check_notification,
-            if (read) Color.White else InsuranceColors.GreenSoft,
-        ) {
-            onOpen(ClientScreen.Completed)
+        when {
+            state.items.isEmpty() && state.error != null -> {
+                Notice(state.error)
+                TextLink("Повторить", onRetry)
+                return@ScreenBody
+            }
+            state.items.isEmpty() && state.loading -> {
+                Caption("Загружаем уведомления…")
+                return@ScreenBody
+            }
+            state.items.isEmpty() -> {
+                Caption("Уведомлений пока нет. Здесь появятся новости по вашим обращениям.")
+                return@ScreenBody
+            }
         }
-        NotificationCard(
-            "Дополнение получено",
-            "ТС-10428 · Проверяем новые материалы",
-            "12:34",
-            Res.drawable.file_notification,
-            if (read) Color.White else InsuranceColors.BlueSoft,
-        ) {
-            onOpen(ClientScreen.Progress)
+        if (state.items.any { it.readAt == null }) TextLink("Прочитать все", onReadAll)
+        else Caption("Все уведомления прочитаны")
+        // Сервер отдаёт страницы по id, а не по дате: внутри загруженного сортируем по времени.
+        // Группы по дням в поясе, который прислал сервер: «2 ноября», «31 октября»…
+        val sorted = state.items.sortedByDescending { it.createdAt }
+        sorted.groupBy { formatDate(it.createdAt) }.forEach { (day, items) ->
+            Label(day)
+            for (item in items) {
+                NotificationCard(item, item.claimId?.let(claimNumbers::get)) { onOpen(item) }
+            }
         }
-        NotificationCard(
-            "Нужны дополнительные материалы",
-            "ТС-10428 · Добавьте фото и извещение",
-            "12:10",
-            Res.drawable.alert_notification,
-            if (read) Color.White else InsuranceColors.AmberSoft,
-        ) {
-            onOpen(ClientScreen.Request)
-        }
-        Label("Ранее сегодня")
-        InsuranceCard(onClick = { onOpen(ClientScreen.Progress) }) {
-            InfoRow(Res.drawable.file, "Обращение отправлено", "ТС-10428 зарегистрировано · 09:41")
+        if (state.error != null) Notice(state.error)
+        when {
+            state.loadingMore -> Caption("Загружаем ещё…")
+            state.nextBeforeId != null -> TextLink("Показать ещё", onMore, centered = true)
         }
     }
 }
 
 @Composable
-private fun NotificationCard(
-    title: String,
-    subtitle: String,
-    time: String,
-    icon: DrawableResource,
-    color: Color,
-    onClick: () -> Unit,
-) {
+private fun NotificationCard(item: NotificationDto, claimNumber: String?, onClick: () -> Unit) {
+    val request = item.type == DocumentsRequired
+    val icon: DrawableResource =
+        if (request) Res.drawable.alert_notification else Res.drawable.file_notification
+    val unreadColor = if (request) InsuranceColors.AmberSoft else InsuranceColors.BlueSoft
+    val color = if (item.readAt == null) unreadColor else Color.White
     InsuranceCard(
         background = color,
         border = if (color == Color.White) InsuranceColors.Line else null,
@@ -71,9 +78,16 @@ private fun NotificationCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             InsuranceIcon(icon, 24.dp)
-            Label(title, Modifier.widthIn(max = 240.dp))
+            Label(item.title, Modifier.weight(1f))
         }
-        Caption(subtitle)
-        Text(time, style = MaterialTheme.typography.labelSmall, color = InsuranceColors.Muted)
+        val text = item.body.takeIf { it != item.title }
+        listOfNotNull(claimNumber, text).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
+            Caption(it)
+        }
+        Text(
+            formatDateTime(item.createdAt).substringAfter(", "),
+            style = MaterialTheme.typography.labelSmall,
+            color = InsuranceColors.Muted,
+        )
     }
 }

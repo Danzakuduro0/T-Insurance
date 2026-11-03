@@ -8,6 +8,7 @@ import kotlinx.serialization.json.put
 import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.NotificationDto
 
 @Preview(name = "01 · Мои обращения", widthDp = 390, heightDp = 844)
 @Composable
@@ -110,5 +111,17 @@ val PreviewClaims =
                 ),
                 previewClaim(3, "ТС-10430", ClaimStatus.DRAFT, "Черновик", "18"),
                 previewClaim(4, "ТС-10386", ClaimStatus.COMPLETED, "Обработка завершена", "10"),
+            ),
+    )
+
+/** Уведомления для @Preview. */
+val PreviewNotifications =
+    NotificationsState(
+        unreadCount = 2,
+        items =
+            listOf(
+                NotificationDto(3, 2, "DOCUMENTS_REQUIRED", "Нужны документы", "Добавьте извещение о ДТП", "2026-10-17T12:10:00+07:00", null),
+                NotificationDto(2, 1, "STATUS_CHANGED", "На рассмотрении", "На рассмотрении", "2026-10-17T10:15:00+07:00", null),
+                NotificationDto(1, 1, "STATUS_CHANGED", "Обращение отправлено", "Обращение отправлено", "2026-10-16T09:41:00+07:00", "2026-10-16T10:00:00+07:00"),
             ),
     )

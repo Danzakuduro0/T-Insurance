@@ -12,13 +12,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import tinsurance.shared.generated.resources.*
 
 @Composable
-fun BrandHeader(onNotifications: () -> Unit, onProfile: () -> Unit) {
+fun BrandHeader(onNotifications: () -> Unit, onProfile: () -> Unit, unread: Int = 0) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 20.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -42,6 +43,7 @@ fun BrandHeader(onNotifications: () -> Unit, onProfile: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             InsuranceIcon(Res.drawable.bell_header, 24.dp)
+            if (unread > 0) UnreadBadge(unread, Modifier.align(Alignment.TopEnd))
         }
         Spacer(Modifier.width(4.dp))
         Box(
@@ -97,6 +99,7 @@ fun ClientNavigation(
     onPolicies: () -> Unit,
     onNotifications: () -> Unit,
     onProfile: () -> Unit,
+    unread: Int = 0,
 ) {
     val labels = listOf("Обращения", "Полисы", "Уведомления", "Профиль")
     val icons =
@@ -123,7 +126,11 @@ fun ClientNavigation(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                InsuranceIcon(icons[index], 23.dp)
+                Box {
+                    InsuranceIcon(icons[index], 23.dp)
+                    if (index == 2 && unread > 0)
+                        UnreadBadge(unread, Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-4).dp))
+                }
                 Text(
                     label,
                     style = MaterialTheme.typography.labelSmall,
@@ -144,5 +151,24 @@ fun PreviewStatusBar() {
     ) {
         Caption("9:41", Modifier.weight(1f), InsuranceColors.Ink)
         Caption("LTE  ▰", color = InsuranceColors.Ink)
+    }
+}
+
+/** Число непрочитанных уведомлений; больше 99 — «99+». */
+@Composable
+private fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .heightIn(min = 16.dp)
+            .widthIn(min = 16.dp)
+            .background(InsuranceColors.Red, CircleShape)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (count > 99) "99+" else count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+        )
     }
 }

@@ -17,6 +17,7 @@ import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.NotificationDto
 import ru.tinsurance.api.mobile.TimelineEvent
 
 data class LoginState(val loading: Boolean = false, val error: String? = null)
@@ -41,6 +42,16 @@ data class ClaimState(
     val timeline: List<TimelineEvent> = emptyList(),
 )
 
+data class NotificationsState(
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: String? = null,
+    val items: List<NotificationDto> = emptyList(),
+    /** null — загружены все. */
+    val nextBeforeId: Long? = null,
+    val unreadCount: Int = 0,
+)
+
 class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : ViewModel() {
     var user by mutableStateOf<UserDto?>(null)
         private set
@@ -52,6 +63,9 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         private set
 
     var claim by mutableStateOf(ClaimState())
+        private set
+
+    var notifications by mutableStateOf(NotificationsState())
         private set
 
     private var claimJob: Job? = null
@@ -71,10 +85,7 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
                             ClaimState(id, details = details.await(), timeline = timeline.await())
                         }
                     } catch (e: ApiException) {
-                        if (e.unauthorized) {
-                            user = null
-                            login = LoginState(error = e.message)
-                        }
+                        checkSession(e)
                         ClaimState(id, error = e.message)
                     }
             }
@@ -105,6 +116,7 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         viewModelScope.launch { api.logout() }
         user = null
         claims = ClaimsState()
+        notifications = NotificationsState()
         openClaim(null)
     }
 
@@ -121,12 +133,98 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
                         ClaimsState(policies = policies.await(), claims = list.await())
                     }
                 } catch (e: ApiException) {
-                    if (e.unauthorized) {
-                        user = null
-                        login = LoginState(error = e.message)
-                    }
+                    checkSession(e)
                     claims.copy(loading = false, error = e.message)
                 }
         }
     }
+
+    fun loadNotifications() {
+        if (notifications.loading) return
+        notifications = notifications.copy(loading = true, error = null)
+        viewModelScope.launch {
+            notifications =
+                try {
+                    coroutineScope {
+                        val page = async { api.notifications() }
+                        val unread = async { unreadCount() }
+                        val first = page.await()
+                        NotificationsState(
+                            items = first.items,
+                            nextBeforeId = first.nextBeforeId,
+                            unreadCount = unread.await(),
+                        )
+                    }
+                } catch (e: ApiException) {
+                    checkSession(e)
+                    notifications.copy(loading = false, error = e.message)
+                }
+        }
+    }
+
+    fun loadMoreNotifications() {
+        val before = notifications.nextBeforeId ?: return
+        if (notifications.loading || notifications.loadingMore) return
+        notifications = notifications.copy(loadingMore = true, error = null)
+        viewModelScope.launch {
+            notifications =
+                try {
+                    val page = api.notifications(beforeId = before)
+                    notifications.copy(
+                        loadingMore = false,
+                        items = notifications.items + page.items,
+                        nextBeforeId = page.nextBeforeId,
+                    )
+                } catch (e: ApiException) {
+                    checkSession(e)
+                    notifications.copy(loadingMore = false, error = e.message)
+                }
+        }
+    }
+
+    /** Для значка на колокольчике: вызывается при возврате к списку обращений. */
+    fun refreshUnreadCount() {
+        viewModelScope.launch {
+            try {
+                notifications = notifications.copy(unreadCount = unreadCount())
+            } catch (e: ApiException) {
+                checkSession(e)
+            }
+        }
+    }
+
+    fun markRead(id: Long) {
+        val item = notifications.items.find { it.id == id } ?: return
+        if (item.readAt != null) return
+        viewModelScope.launch {
+            try {
+                val updated = api.markNotificationRead(id)
+                notifications =
+                    notifications.copy(
+                        items = notifications.items.map { if (it.id == id) updated else it },
+                        unreadCount = (notifications.unreadCount - 1).coerceAtLeast(0),
+                    )
+            } catch (e: ApiException) {
+                checkSession(e)
+            }
+        }
+    }
+
+    // В API нет «прочитать все»: отмечаем загруженные непрочитанные по одному.
+    fun markAllRead() {
+        notifications.items.filter { it.readAt == null }.forEach { markRead(it.id) }
+    }
+
+    private suspend fun unreadCount(): Int =
+        api.notifications(limit = MaxUnreadShown, unreadOnly = true).items.size
+
+    private fun checkSession(e: ApiException) {
+        if (e.unauthorized) {
+            user = null
+            login = LoginState(error = e.message)
+        }
+    }
 }
+
+/** Больше значок не показывает: «99+». */
+const val MaxUnreadShown = 100
