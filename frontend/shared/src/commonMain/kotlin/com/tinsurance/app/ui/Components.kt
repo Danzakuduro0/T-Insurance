@@ -265,6 +265,7 @@ fun InsuranceField(
     keyboard: KeyboardType = KeyboardType.Text,
     error: String? = null,
     password: Boolean = false,
+    inputMinHeight: Dp = 44.dp,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Caption(label)
@@ -273,7 +274,7 @@ fun InsuranceField(
             onValueChange = onChange,
             modifier =
                 Modifier.fillMaxWidth()
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = inputMinHeight)
                     .background(
                         InsuranceColors.Field,
                         RoundedCornerShape(if (multiline) 16.dp else 12.dp),
@@ -296,14 +297,28 @@ fun InsuranceField(
                 KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
             visualTransformation =
                 if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            decorationBox = { input -> Box(contentAlignment = Alignment.CenterStart) { input() } },
+            decorationBox = { input ->
+                Box(contentAlignment = if (multiline) Alignment.TopStart else Alignment.CenterStart) { input() }
+            },
         )
         if (error != null) Caption(error, color = InsuranceColors.Red)
     }
 }
 
 @Composable
-fun InsuranceCheckbox(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun InsuranceCheckbox(
+    text: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) = InsuranceCheckbox(text, checked, Res.drawable.check_black, onChange)
+
+@Composable
+fun InsuranceCheckbox(
+    text: String,
+    checked: Boolean,
+    checkIcon: DrawableResource,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth()
             .heightIn(min = 32.dp)
@@ -324,7 +339,7 @@ fun InsuranceCheckbox(text: String, checked: Boolean, onChange: (Boolean) -> Uni
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (checked) InsuranceIcon(Res.drawable.check_black, 16.dp)
+            if (checked) InsuranceIcon(checkIcon, 16.dp)
         }
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }

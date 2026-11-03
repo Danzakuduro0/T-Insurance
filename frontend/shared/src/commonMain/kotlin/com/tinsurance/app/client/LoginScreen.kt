@@ -10,7 +10,11 @@ import com.tinsurance.app.ui.*
 
 // Экрана входа нет в макете: собран из тех же компонентов, что и остальные экраны.
 @Composable
-fun LoginScreen(state: LoginState, onLogin: (phone: String, password: String) -> Unit) {
+fun LoginScreen(
+    state: LoginState,
+    onLogin: (phone: String, password: String) -> Unit,
+    onOperator: () -> Unit = {},
+) {
     var phone by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
@@ -31,6 +35,7 @@ fun LoginScreen(state: LoginState, onLogin: (phone: String, password: String) ->
                     password = true,
                     error = state.error,
                 )
+                TextLink("Демокабинет оператора", onOperator)
             }
         }
         ActionFooter(
