@@ -12,6 +12,7 @@ import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -25,6 +26,8 @@ import kotlinx.serialization.json.Json
 import ru.tinsurance.api.*
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.NotificationDto
+import ru.tinsurance.api.mobile.NotificationsPage
 import ru.tinsurance.api.mobile.TimelineEvent
 
 /** Сообщение для клиента уже на русском: из ErrorResponse сервера или общее. */
@@ -120,6 +123,25 @@ class MobileApiClient(
 
     suspend fun timeline(id: Long): List<TimelineEvent> = call {
         http.get(claimPath(MobileApi.CLAIM_TIMELINE, id)).body()
+    }
+
+    /** Страница уведомлений, новые сверху; следующая — с beforeId = nextBeforeId. */
+    suspend fun notifications(
+        beforeId: Long? = null,
+        limit: Int = 20,
+        unreadOnly: Boolean = false,
+    ): NotificationsPage = call {
+        http
+            .get(path(MobileApi.NOTIFICATIONS)) {
+                parameter("limit", limit)
+                parameter("beforeId", beforeId)
+                if (unreadOnly) parameter("unreadOnly", true)
+            }
+            .body()
+    }
+
+    suspend fun markNotificationRead(id: Long): NotificationDto = call {
+        http.post(claimPath(MobileApi.NOTIFICATION_READ, id)).body()
     }
 
     private fun claimPath(apiPath: String, id: Long) = path(apiPath.replace("{id}", id.toString()))
