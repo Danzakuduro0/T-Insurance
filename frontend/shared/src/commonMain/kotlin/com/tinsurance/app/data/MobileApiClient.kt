@@ -3,7 +3,9 @@ package com.tinsurance.app.data
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.ResponseException
+import io.ktor.client.plugins.expectSuccess
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.authProvider
 import io.ktor.client.plugins.auth.providers.BearerAuthProvider
@@ -11,11 +13,16 @@ import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -29,6 +36,7 @@ import ru.tinsurance.api.mobile.ClaimListItem
 import ru.tinsurance.api.mobile.NotificationDto
 import ru.tinsurance.api.mobile.NotificationsPage
 import ru.tinsurance.api.mobile.TimelineEvent
+import ru.tinsurance.api.mobile.UpdateClaimRequest
 
 /** Сообщение для клиента уже на русском: из ErrorResponse сервера или общее. */
 class ApiException(val status: Int, message: String) : Exception(message) {
@@ -144,6 +152,60 @@ class MobileApiClient(
         http.post(claimPath(MobileApi.NOTIFICATION_READ, id)).body()
     }
 
+    /** После запроса уточнений можно менять только запрошенные поля; null — поле не меняется. */
+    suspend fun updateClaim(id: Long, request: UpdateClaimRequest): ClaimDetails = call {
+        http
+            .patch(claimPath(MobileApi.CLAIM, id)) {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+            .body()
+    }
+
+    /** Отправка или повторная отправка после дозагрузки; 409 — пункты запроса не выполнены. */
+    suspend fun submit(id: Long): ClaimDetails = call {
+        http.post(claimPath(MobileApi.CLAIM_SUBMIT, id)).body()
+    }
+
+    /**
+     * Загрузка файла. Отклонённый файл (422) — не ошибка: приходит ClaimFileDto со status = REJECTED,
+     * причиной и подсказкой. 413 и прочие ошибки — ApiException.
+     */
+    suspend fun uploadFile(
+        claimId: Long,
+        documentType: String,
+        fileName: String,
+        bytes: ByteArray,
+        replacesFileId: Long? = null,
+        clientRequestId: String = Uuid.random().toString(),
+    ): ClaimFileDto = call {
+        val response =
+            http.submitFormWithBinaryData(
+                claimPath(MobileApi.CLAIM_FILES, claimId),
+                formData {
+                    append("documentType", documentType)
+                    append("clientRequestId", clientRequestId)
+                    replacesFileId?.let { append("replacesFileId", it.toString()) }
+                    append(
+                        "file",
+                        bytes,
+                        Headers.build {
+                            append(HttpHeaders.ContentType, mimeType(fileName))
+                            append(HttpHeaders.ContentDisposition, "filename=\"${fileName.asciiName()}\"")
+                        },
+                    )
+                },
+            ) {
+                expectSuccess = false
+            }
+        when (response.status) {
+            HttpStatusCode.OK,
+            HttpStatusCode.Created,
+            HttpStatusCode.UnprocessableEntity -> response.body<ClaimFileDto>()
+            else -> throw ClientRequestException(response, "")
+        }
+    }
+
     private fun claimPath(apiPath: String, id: Long) = path(apiPath.replace("{id}", id.toString()))
 
     private suspend fun <T> call(block: suspend () -> T): T =
@@ -172,6 +234,20 @@ class MobileApiClient(
     // Пути в ApiPaths начинаются с "/": убираем, чтобы они складывались с baseUrl.
     private fun path(apiPath: String) = apiPath.removePrefix("/")
 }
+
+/** Тип по расширению; сервер всё равно проверяет содержимое файла. */
+fun mimeType(fileName: String) =
+    when (fileName.substringAfterLast('.', "").lowercase()) {
+        "jpg",
+        "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "pdf" -> "application/pdf"
+        else -> "application/octet-stream"
+    }
+
+// Заголовок Content-Disposition — только ASCII; имя файла сервер берёт отсюда для отображения.
+private fun String.asciiName() =
+    map { if (it.code in 32..126 && it != '"' && it != '\\') it else '_' }.joinToString("")
 
 /** Телефон в формате сервера: +7XXXXXXXXXX. Ввод вида 8 900…, 900…, +7 (900)… */
 fun normalizePhone(input: String): String {

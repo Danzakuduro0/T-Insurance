@@ -102,16 +102,16 @@ fun ClaimCompletedScreen(state: ClaimState, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun LoadingOrError(state: ClaimState, onRetry: () -> Unit) {
+fun LoadingOrError(state: ClaimState, onRetry: () -> Unit) {
     if (state.error != null) {
         Notice(state.error)
         TextLink("Повторить", onRetry)
     } else Caption("Загружаем обращение…")
 }
 
-/** Файлы, которые клиент видит в обращении: без удалённых и заменённых. */
+/** Материалы обращения для клиента: принятые и ещё проверяемые, без отклонённых, дублей и заменённых. */
 val ClaimDetails.visibleFiles
-    get() = files.filter { it.status != FileStatus.DELETED && it.status != FileStatus.REPLACED }
+    get() = files.filter { it.status == FileStatus.ACCEPTED || it.status == FileStatus.UPLOADED }
 
 fun timelineItems(claim: ClaimDetails, allEvents: List<TimelineEvent>): List<TimelineItem> = buildList {
     // Создание черновика клиенту не интересно: история начинается с отправки.
@@ -128,7 +128,7 @@ fun timelineItems(claim: ClaimDetails, allEvents: List<TimelineEvent>): List<Tim
     if (!claim.isFinal) add(TimelineItem("Обработка завершена", status = "waiting"))
 }
 
-private fun statusHint(status: ClaimStatus) =
+fun statusHint(status: ClaimStatus) =
     when (status) {
         ClaimStatus.SUBMITTED,
         ClaimStatus.IN_ANALYSIS -> "Проверяем материалы"

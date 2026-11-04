@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import ru.tinsurance.api.ClaimStatus
+import ru.tinsurance.api.InfoRequestItemDto
 import ru.tinsurance.api.mobile.ClaimListItem
 import tinsurance.shared.generated.resources.*
 
@@ -86,6 +87,10 @@ private fun ClientApp(showStatusBar: Boolean, initialScreen: ClientScreen, onOpe
         var message by remember { mutableStateOf<String?>(null) }
         var dialog by remember { mutableStateOf<String?>(null) }
         var editingReview by remember { mutableStateOf(false) }
+        // Пункт запроса, для которого открыт выбор файлов или камера.
+        var replyItem by remember { mutableStateOf<InfoRequestItemDto?>(null) }
+        // Ответы на запрошенные поля: fieldName → текст.
+        var replyFields by remember { mutableStateOf(emptyMap<String, String>()) }
         var loadingFiles by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
@@ -135,9 +140,37 @@ private fun ClientApp(showStatusBar: Boolean, initialScreen: ClientScreen, onOpe
             } else open(next)
         }
 
+        // Ответ на запрос настоящего обращения: файлы сразу уходят на сервер по выбранному пункту.
+        fun uploadReplyFiles(files: List<PlatformFile>, item: InfoRequestItemDto) {
+            scope.launch {
+                try {
+                    val read =
+                        files.mapNotNull { file ->
+                            val error = fileError(file.name, file.size(), 0, 0)
+                            if (error != null) {
+                                message = "${file.name}: $error"
+                                null
+                            } else file.name to file.readBytes()
+                        }
+                    client.uploadReplyFiles(read, item)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    message = "Не удалось прочитать файл. Попробуйте выбрать его ещё раз."
+                }
+            }
+        }
+
         // Keep the picker at the root: on iOS it must outlive the screen that opens it.
+        // The launcher keeps the first addFiles, so read state here, not vals like screen/realClaim.
         fun addFiles(files: List<PlatformFile>?) {
             if (files.isNullOrEmpty()) return
+            val item = replyItem
+            val onReply = screenName == ClientScreen.Reply.name
+            if (!inspection && client.claim.id != null && onReply && item != null) {
+                uploadReplyFiles(files, item)
+                return
+            }
             scope.launch {
                 loadingFiles = true
                 try {
@@ -166,7 +199,7 @@ private fun ClientApp(showStatusBar: Boolean, initialScreen: ClientScreen, onOpe
                         if (isPhoto) photoReplaced = true
                         formatError = false
                     }
-                    if (screen == ClientScreen.PhotoQuality && photoReplaced) back()
+                    if (screenName == ClientScreen.PhotoQuality.name && photoReplaced) back()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -316,16 +349,38 @@ private fun ClientApp(showStatusBar: Boolean, initialScreen: ClientScreen, onOpe
                                         onDetails = { dialog = "details" },
                                         onReply = { open(ClientScreen.Reply) },
                                     )
-                            ClientScreen.Request -> RequestScreen()
+                            ClientScreen.Request ->
+                                if (realClaim) ClaimRequestScreen(client.claim, client::reloadClaim)
+                                else RequestScreen()
                             ClientScreen.Reply ->
-                                ReplyScreen(
-                                    draft,
-                                    claimNumber,
-                                    attachments.lastOrNull { it.isPhoto },
-                                    onRequest = { open(ClientScreen.Request) },
-                                    onUpload = pickFiles,
-                                    onDocument = { saveDocument(false) },
-                                )
+                                if (realClaim)
+                                    ClaimReplyScreen(
+                                        client.claim,
+                                        client.reply,
+                                        replyFields,
+                                        onField = { name, value ->
+                                            replyFields = replyFields + (name to value)
+                                        },
+                                        onPickFiles = { item ->
+                                            replyItem = item
+                                            pickFiles()
+                                        },
+                                        onTakePhoto = { item ->
+                                            replyItem = item
+                                            takePhoto()
+                                        },
+                                        onRequest = ::back,
+                                        onRetry = client::reloadClaim,
+                                    )
+                                else
+                                    ReplyScreen(
+                                        draft,
+                                        claimNumber,
+                                        attachments.lastOrNull { it.isPhoto },
+                                        onRequest = { open(ClientScreen.Request) },
+                                        onUpload = pickFiles,
+                                        onDocument = { saveDocument(false) },
+                                    )
                             ClientScreen.Completed ->
                                 if (realClaim)
                                     ClaimCompletedScreen(client.claim, client::reloadClaim)
@@ -414,19 +469,49 @@ private fun ClientApp(showStatusBar: Boolean, initialScreen: ClientScreen, onOpe
                     ClientScreen.Request ->
                         ActionFooter(
                             "Добавить материалы",
-                            { open(ClientScreen.Reply) },
+                            {
+                                val details = client.claim.details
+                                if (realClaim && details != null) {
+                                    client.resetReply()
+                                    // Подставляем текущие значения: сервер принимает и подтверждение прежнего.
+                                    replyFields =
+                                        details.openInfoRequest?.items.orEmpty()
+                                            .mapNotNull { it.fieldName }
+                                            .filter(::isTextField)
+                                            .associateWith { currentFieldValue(details, it) }
+                                }
+                                open(ClientScreen.Reply)
+                            },
+                            enabled = !realClaim || client.claim.details?.openInfoRequest != null,
                             link = "Открыть исходное обращение",
                             onLink = { open(ClientScreen.Progress) },
                         )
                     ClientScreen.Reply ->
-                        ActionFooter(
-                            "Отправить дополнение",
-                            {
-                                repliedClaim = claimNumber
-                                open(ClientScreen.Progress)
-                            },
-                            enabled = !loadingFiles,
-                        )
+                        if (realClaim) {
+                            val reply = client.reply
+                            ActionFooter(
+                                if (reply.sending) "Отправляем…" else "Отправить дополнение",
+                                {
+                                    val requested =
+                                        client.claim.details?.openInfoRequest?.items.orEmpty()
+                                            .filter { !it.isFulfilled }
+                                            .mapNotNull { it.fieldName }
+                                    client.sendReply(replyFields.filterKeys { it in requested }) {
+                                        home()
+                                        open(ClientScreen.Progress)
+                                    }
+                                },
+                                enabled = !reply.uploading && !reply.sending,
+                            )
+                        } else
+                            ActionFooter(
+                                "Отправить дополнение",
+                                {
+                                    repliedClaim = claimNumber
+                                    open(ClientScreen.Progress)
+                                },
+                                enabled = !loadingFiles,
+                            )
                     ClientScreen.Completed -> ActionFooter("К обращениям", ::home, secondary = true)
                 }
             }
