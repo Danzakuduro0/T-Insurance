@@ -34,6 +34,8 @@ import ru.tinsurance.server.routing.RoutingConfig
 import ru.tinsurance.server.notifications.NotificationService
 import ru.tinsurance.server.notifications.SendNotificationHandler
 import ru.tinsurance.server.notifications.SimulatedNotificationSender
+import ru.tinsurance.server.dashboard.DashboardConfig
+import ru.tinsurance.server.dashboard.DashboardService
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
@@ -57,6 +59,7 @@ class AppContainer(
     val decisions = DecisionReviewService(database)
     private val assignmentConfig = AssignmentConfig.from(config)
     private val operators = OperatorRepository(assignmentConfig.defaultMaxActiveClaims)
+    val dashboard = DashboardService(database, operators, DashboardConfig.from(config))
     private val autoAssigner = AutoAssigner(operators, assignmentConfig.autoAssign)
     val assignments = AssignmentService(database, operators, autoAssigner)
     val operatorActions = OperatorActionsService(database, claimsConfig, filesConfig.maxFilesPerClaim, autoAssigner)

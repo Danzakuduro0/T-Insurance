@@ -25,6 +25,7 @@ object MobileApi {
 }
 
 object OperatorApi {
+    const val DASHBOARD = "/api/operator/dashboard"
     const val BASE = "/api/operator"
     const val LOGIN = "$BASE/auth/login"
     const val REFRESH = "$BASE/auth/refresh"
