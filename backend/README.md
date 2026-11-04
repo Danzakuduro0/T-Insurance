@@ -118,3 +118,7 @@ API, permissions and Postman instructions: [docs/OPERATOR_ACTIONS.md](docs/OPERA
 ## Шаг 7: уведомления
 
 Реализованы атомарное создание уведомлений при смене статуса, клиентский API и фоновая имитация PUSH/SMS. Подробности: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md).
+
+## Шаг 8: dashboard администратора
+
+Реализованы API нагрузки, метрики обработки и рекомендации. [Описание](docs/ADMIN_DASHBOARD.md).

@@ -2097,6 +2097,72 @@
           ]
         }
       ]
+    },
+    {
+      "name": "8. Администрирование",
+      "item": [
+        {
+          "name": "Вход администратора",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/operator/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.collectionVariables.set(\"adminToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Нагрузка и показатели",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/operator/dashboard",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Dashboard\", () => { const data = pm.response.json(); pm.expect(data.queues).to.be.an(\"array\"); pm.expect(data.metrics).to.be.an(\"object\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -2178,6 +2244,14 @@
     },
     {
       "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@tstrah.test"
+    },
+    {
+      "key": "adminToken",
       "value": ""
     }
   ]
