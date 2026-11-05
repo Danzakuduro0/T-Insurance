@@ -98,3 +98,7 @@ security:
   maxJsonBodyBytes: 262144
   # Через сколько дней после истечения или выхода сессия удаляется из БД
   sessionRetentionDays: 30
+
+dashboard:
+  queuedThreshold: 20
+  overdueThreshold: 5

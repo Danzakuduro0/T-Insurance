@@ -282,8 +282,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 | Шаг | Что | Решения, принятые заранее |
 |---|---|---|
-| 8 | Администрирование | `GET /api/operator/dashboard` по `queue_load` / `operator_load`: признак перегрузки по порогу, рекомендации, средние сроки |
-| 9 | OpenAPI-описание, хранилище S3 | |
+| 9 | Хранилище S3 | OpenAPI и Swagger UI реализованы; S3 отложено |
 | 10 | Нагрузочный профиль, сценарий демо | |
 
 Таблицы для шагов 3–8 (`background_jobs`, `image_analyses`, `claim_decisions`, `notifications`) уже есть в схеме.
@@ -306,3 +305,11 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 ## Шаг 7: уведомления
 
 Реализованы атомарное создание уведомлений при смене статуса, клиентский API и фоновая имитация PUSH/SMS. Подробности: [NOTIFICATIONS.md](NOTIFICATIONS.md).
+
+## Шаг 8: dashboard администратора
+
+Реализованы API нагрузки, метрики обработки и рекомендации. [Описание](ADMIN_DASHBOARD.md).
+
+## OpenAPI и Swagger UI
+
+`/swagger` — интерактивная документация, `/openapi.json` — контракт. [Инструкция](OPENAPI.md). S3 остаётся отдельной задачей.
