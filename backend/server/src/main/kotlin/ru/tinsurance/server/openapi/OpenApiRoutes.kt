@@ -18,7 +18,7 @@ fun Route.openApiRoutes() {
         call.respondText(javaClass.getResource("/openapi/index.html")!!.readText(), ContentType.Text.Html)
     }
     for ((file, mime) in mapOf("swagger-ui.css" to "text/css", "swagger-ui-bundle.js" to "application/javascript")) {
-        val bytes = checkNotNull(javaClass.getResourceAsStream("/META-INF/resources/webjars/swagger-ui/5.17.14/$file")).use { it.readBytes() }
+        val bytes = checkNotNull(javaClass.getResourceAsStream("/META-INF/resources/webjars/swagger-ui/5.34.1/$file")).use { it.readBytes() }
         get("/swagger/$file") { call.respondBytes(bytes, ContentType.parse(mime)) }
     }
 }

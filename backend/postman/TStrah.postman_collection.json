@@ -2116,7 +2116,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"OpenAPI 3.1\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().openapi).to.eql(\"3.1.0\"); });"
+                  "pm.test(\"OpenAPI 3.2\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().openapi).to.eql(\"3.2.1\"); });"
                 ]
               }
             }
