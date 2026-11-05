@@ -11,21 +11,14 @@ import com.tinsurance.app.data.normalizePhone
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import ru.tinsurance.api.ClaimField
-import ru.tinsurance.api.ClaimFileDto
 import ru.tinsurance.api.ClaimStatus
-import ru.tinsurance.api.InfoRequestItemDto
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
 import ru.tinsurance.api.mobile.NotificationDto
 import ru.tinsurance.api.mobile.TimelineEvent
-import ru.tinsurance.api.mobile.UpdateClaimRequest
 
 data class LoginState(val loading: Boolean = false, val error: String? = null)
 
@@ -59,17 +52,6 @@ data class NotificationsState(
     val unreadCount: Int = 0,
 )
 
-/** Файл, загруженный в ответ на запрос: принят, дубль или отклонён с подсказкой. */
-data class UploadedFile(val name: String, val documentTypeName: String, val result: ClaimFileDto)
-
-/** Экран «Ответ на запрос»: загрузки этого сеанса и повторная отправка. */
-data class ReplyState(
-    val uploading: Boolean = false,
-    val sending: Boolean = false,
-    val uploads: List<UploadedFile> = emptyList(),
-    val error: String? = null,
-)
-
 class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : ViewModel() {
     var user by mutableStateOf<UserDto?>(null)
         private set
@@ -85,74 +67,6 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
 
     var notifications by mutableStateOf(NotificationsState())
         private set
-
-    var reply by mutableStateOf(ReplyState())
-        private set
-
-    /**
-     * Загружает файлы по одному пункту запроса. После каждой загрузки обновляем обращение:
-     * сервер сам отмечает пункты запроса выполненными.
-     */
-    fun uploadReplyFiles(files: List<Pair<String, ByteArray>>, item: InfoRequestItemDto) {
-        val claimId = claim.id ?: return
-        val documentType = item.documentType ?: return
-        if (reply.uploading || files.isEmpty()) return
-        reply = reply.copy(uploading = true, error = null)
-        viewModelScope.launch {
-            var uploads = reply.uploads
-            var error: String? = null
-            for ((name, bytes) in files) {
-                try {
-                    val result = api.uploadFile(claimId, documentType, name, bytes, item.fileId)
-                    uploads = uploads + UploadedFile(name, item.documentTypeName ?: documentType, result)
-                } catch (e: ApiException) {
-                    checkSession(e)
-                    error = "$name: ${e.message}"
-                }
-            }
-            reply = reply.copy(uploading = false, uploads = uploads, error = error)
-            refreshClaimDetails()
-            // Качество фото сервер проверяет в фоне за несколько секунд: подтягиваем итог.
-            for (pause in listOf(2_000L, 4_000L)) {
-                delay(pause)
-                refreshClaimDetails()
-            }
-        }
-    }
-
-    /** Сохраняет ответы на запрошенные поля и отправляет обращение повторно. */
-    fun sendReply(fields: Map<String, String>, onSent: () -> Unit) {
-        val claimId = claim.id ?: return
-        if (reply.sending || reply.uploading) return
-        reply = reply.copy(sending = true, error = null)
-        viewModelScope.launch {
-            try {
-                if (fields.isNotEmpty()) api.updateClaim(claimId, fieldsUpdate(fields))
-                api.submit(claimId)
-                reply = ReplyState()
-                openClaim(claimId)
-                onSent()
-            } catch (e: ApiException) {
-                checkSession(e)
-                reply = reply.copy(sending = false, error = e.message)
-                refreshClaimDetails()
-            }
-        }
-    }
-
-    fun resetReply() {
-        reply = ReplyState()
-    }
-
-    private suspend fun refreshClaimDetails() {
-        val id = claim.id ?: return
-        try {
-            val details = api.claim(id)
-            if (claim.id == id) claim = claim.copy(details = details)
-        } catch (e: ApiException) {
-            checkSession(e)
-        }
-    }
 
     private var claimJob: Job? = null
 
@@ -314,24 +228,3 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
 
 /** Больше значок не показывает: «99+». */
 const val MaxUnreadShown = 100
-
-private val textFields =
-    setOf(ClaimField.DESCRIPTION, ClaimField.EVENT_LOCATION, ClaimField.CONTACT_PHONE)
-        .map { it.apiName }
-
-/** Текстом отвечаем на основные строковые поля и ключи details; дата, полис и тип — через форму. */
-fun isTextField(name: String) = name in textFields || ClaimField.entries.none { it.apiName == name }
-
-/** Основные поля обращения уходят своими полями UpdateClaimRequest, ключи details — в details. */
-fun fieldsUpdate(fields: Map<String, String>): UpdateClaimRequest {
-    val details = fields.filterKeys { it !in textFields && isTextField(it) }
-    return UpdateClaimRequest(
-        description = fields[ClaimField.DESCRIPTION.apiName],
-        eventLocation = fields[ClaimField.EVENT_LOCATION.apiName],
-        contactPhone = fields[ClaimField.CONTACT_PHONE.apiName],
-        details =
-            details
-                .takeIf { it.isNotEmpty() }
-                ?.let { map -> JsonObject(map.mapValues { (_, value) -> JsonPrimitive(value) }) },
-    )
-}

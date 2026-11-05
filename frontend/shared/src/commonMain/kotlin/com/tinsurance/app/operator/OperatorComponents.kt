@@ -104,9 +104,10 @@ internal fun OperatorInput(
     modifier: Modifier = Modifier,
     icon: DrawableResource? = null,
     compact: Boolean = false,
+    height: Dp = 44.dp,
 ) {
     Row(
-        modifier.height(if (compact) 40.dp else 44.dp).background(InsuranceColors.Field, RoundedCornerShape(12.dp))
+        modifier.height(if (compact) 40.dp else height).background(InsuranceColors.Field, RoundedCornerShape(12.dp))
             .then(if (compact) Modifier else Modifier.border(1.dp, InsuranceColors.Line, RoundedCornerShape(12.dp)))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -140,13 +141,14 @@ internal fun OperatorSelect(
     modifier: Modifier = Modifier,
     allowAll: Boolean = true,
     label: String? = null,
+    height: Dp = 44.dp,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (label != null) Caption(label)
         Box {
             Box(
-                Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(12.dp))
                     .background(InsuranceColors.Field)
                     .border(1.dp, InsuranceColors.Line, RoundedCornerShape(12.dp))
                     .clickable(role = Role.Button, onClickLabel = label ?: placeholder) { expanded = true }

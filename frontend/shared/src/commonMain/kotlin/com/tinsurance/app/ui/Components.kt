@@ -83,14 +83,15 @@ fun InsuranceCard(
     padding: Dp = 12.dp,
     spacing: Dp = 6.dp,
     onClick: (() -> Unit)? = null,
+    borderWidth: Dp = 1.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
-    val outline = if (border != null) Modifier.border(1.dp, border, shape) else Modifier
+    val outline = if (border != null) Modifier.border(borderWidth, border, shape) else Modifier
     val click =
         if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier
     // Figma draws these borders outside the padding.
-    val inset = padding + if (border != null) 1.dp else 0.dp
+    val inset = padding + if (border != null) borderWidth else 0.dp
     Column(
         modifier
             .fillMaxWidth()
@@ -137,15 +138,16 @@ fun InsuranceButton(
     onClick: () -> Unit,
     secondary: Boolean = false,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     val background = if (secondary || !enabled) InsuranceColors.Field else InsuranceColors.Yellow
     Box(
         Modifier.fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .heightIn(min = if (compact) 36.dp else 48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = if (compact) 8.dp else 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Label(text, color = if (enabled) InsuranceColors.Ink else InsuranceColors.Muted)
@@ -266,12 +268,14 @@ fun InsuranceField(
     error: String? = null,
     password: Boolean = false,
     inputMinHeight: Dp = 44.dp,
+    readOnly: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Caption(label)
         BasicTextField(
             value = value,
             onValueChange = onChange,
+            readOnly = readOnly,
             modifier =
                 Modifier.fillMaxWidth()
                     .heightIn(min = inputMinHeight)

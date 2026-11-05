@@ -14,6 +14,8 @@ fun LoginScreen(
     state: LoginState,
     onLogin: (phone: String, password: String) -> Unit,
     onOperator: () -> Unit = {},
+    onAdmin: () -> Unit = {},
+    onDemo: () -> Unit = {},
 ) {
     var phone by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -36,6 +38,8 @@ fun LoginScreen(
                     error = state.error,
                 )
                 TextLink("Демокабинет оператора", onOperator)
+                TextLink("Демокабинет администратора", onAdmin)
+                TextLink("Выбрать роль в демосценарии", onDemo)
             }
         }
         ActionFooter(

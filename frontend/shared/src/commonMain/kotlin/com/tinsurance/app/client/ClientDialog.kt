@@ -23,6 +23,7 @@ fun ClientDialog(
     /** Настоящее обращение для «Материалов» и «Сведений»; null — данные макета. */
     claim: ClaimDetails? = null,
     onLogout: (() -> Unit)? = null,
+    onDemo: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     var policy by remember { mutableStateOf(draft.policy) }
@@ -119,6 +120,7 @@ fun ClientDialog(
                             { draft.notifications = it },
                         )
                         if (onLogout != null && user != null) TextLink("Выйти", onLogout)
+                        if (onDemo != null) TextLink("Выбрать роль в демосценарии", onDemo)
                     }
                     "photo" -> DamagePhoto(modifier = Modifier.fillMaxWidth().height(220.dp))
                     "materials" ->

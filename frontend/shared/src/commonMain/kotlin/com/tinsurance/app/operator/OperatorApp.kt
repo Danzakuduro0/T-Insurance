@@ -31,7 +31,7 @@ import tinsurance.shared.generated.resources.*
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-fun OperatorApp(initialScreen: OperatorScreen = OperatorScreen.Queue, onClient: () -> Unit = {}) {
+fun OperatorApp(initialScreen: OperatorScreen = OperatorScreen.Queue, onClient: () -> Unit = {}, onDemo: (() -> Unit)? = null) {
     val state = remember { OperatorState(historyPreview = initialScreen == OperatorScreen.History) }
     var screenName by rememberSaveable { mutableStateOf(when (initialScreen) {
         OperatorScreen.Correction -> OperatorScreen.Materials.name
@@ -144,7 +144,12 @@ fun OperatorApp(initialScreen: OperatorScreen = OperatorScreen.Queue, onClient: 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     when (info) {
-                        "profile" -> { Label(OperatorName); Caption("Оператор"); TextLink("К клиентскому приложению", onClient) }
+                        "profile" -> {
+                            Label(OperatorName)
+                            Caption("Оператор")
+                            TextLink("К клиентскому приложению", onClient)
+                            if (onDemo != null) TextLink("Выбор роли", onDemo)
+                        }
                         "notifications" -> {
                             val notifications = state.events.values.flatten().filter { it.notification }
                             if (notifications.isEmpty()) Caption("Новых уведомлений пока нет")

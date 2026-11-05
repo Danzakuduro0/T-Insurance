@@ -4,6 +4,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import com.tinsurance.app.client.ClientScreen
 import com.tinsurance.app.operator.OperatorScreen
+import com.tinsurance.app.admin.AdminScreen
 import web.location.location
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -16,7 +17,11 @@ fun main() {
     val operatorScreen = OperatorScreen.entries.firstOrNull {
         "Operator${it.name}".equals(location.hash.removePrefix("#"), ignoreCase = true)
     }
+    val adminScreen = AdminScreen.entries.firstOrNull {
+        "Admin${it.name}".equals(location.hash.removePrefix("#"), ignoreCase = true)
+    }
     ComposeViewport {
-        App(showStatusBar = true, initialScreen = initialScreen, initialOperatorScreen = operatorScreen)
+        App(showStatusBar = true, initialScreen = initialScreen, initialOperatorScreen = operatorScreen,
+            initialAdminScreen = adminScreen, showDemo = location.hash.equals("#Demo", ignoreCase = true))
     }
 }
