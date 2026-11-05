@@ -37,7 +37,7 @@ class ApiDocument {
         check(paths.getOrPut(path) { linkedMapOf() }.put(method, operation) == null)
     }
 
-    fun build() = obj("openapi" to str("3.1.0"),
+    fun build() = obj("openapi" to str("3.2.1"),
         "info" to obj("title" to str("Т-Страхование Backend API"), "version" to str("1.0.0"),
             "description" to str("Вымышленные страховые обращения. Решения о выплатах не принимаются. Даты — ISO 8601. Для мобильного и веб-канала нужны разные JWT; администратор использует веб-вход.")),
         "servers" to JsonArray(listOf(obj("url" to str("/")))),

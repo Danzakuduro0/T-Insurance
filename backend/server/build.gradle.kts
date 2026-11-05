@@ -12,7 +12,7 @@ application {
 
 dependencies {
     api(project(":core"))
-    implementation("org.webjars:swagger-ui:5.17.14")
+    implementation("org.webjars:swagger-ui:5.34.1")
     implementation(libs.logback)
     implementation(libs.ktor.serverCore)
     implementation(libs.ktor.serverNetty)

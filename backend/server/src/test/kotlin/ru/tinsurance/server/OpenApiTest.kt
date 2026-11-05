@@ -18,7 +18,7 @@ class OpenApiTest {
     fun documentAndLocalSwaggerAssetsAreServedWithoutChangingApiAuthentication() = apiTest { http ->
         val result = http.get("/openapi.json")
         assertEquals(HttpStatusCode.OK, result.status)
-        assertEquals("3.1.0", Json.parseToJsonElement(result.bodyAsText()).jsonObject.getValue("openapi").jsonPrimitive.content)
+        assertEquals("3.2.1", Json.parseToJsonElement(result.bodyAsText()).jsonObject.getValue("openapi").jsonPrimitive.content)
         for (url in listOf("/swagger/index.html", "/swagger/swagger-ui.css", "/swagger/swagger-ui-bundle.js")) {
             val response = http.get(url)
             assertEquals(HttpStatusCode.OK, response.status, url)
