@@ -102,7 +102,7 @@ fun ClaimCompletedScreen(state: ClaimState, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun LoadingOrError(state: ClaimState, onRetry: () -> Unit) {
+internal fun LoadingOrError(state: ClaimState, onRetry: () -> Unit) {
     if (state.error != null) {
         Notice(state.error)
         TextLink("Повторить", onRetry)
@@ -128,7 +128,7 @@ fun timelineItems(claim: ClaimDetails, allEvents: List<TimelineEvent>): List<Tim
     if (!claim.isFinal) add(TimelineItem("Обработка завершена", status = "waiting"))
 }
 
-private fun statusHint(status: ClaimStatus) =
+internal fun statusHint(status: ClaimStatus) =
     when (status) {
         ClaimStatus.SUBMITTED,
         ClaimStatus.IN_ANALYSIS -> "Проверяем материалы"

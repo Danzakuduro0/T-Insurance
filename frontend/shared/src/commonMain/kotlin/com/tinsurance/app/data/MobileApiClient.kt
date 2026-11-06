@@ -3,6 +3,7 @@ package com.tinsurance.app.data
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.authProvider
@@ -12,12 +13,17 @@ import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -125,6 +131,39 @@ class MobileApiClient(
         http.get(claimPath(MobileApi.CLAIM_TIMELINE, id)).body()
     }
 
+    suspend fun submit(id: Long): ClaimDetails = call {
+        http.post(claimPath(MobileApi.CLAIM_SUBMIT, id)).body()
+    }
+
+    suspend fun uploadFile(
+        id: Long,
+        documentType: String,
+        name: String,
+        bytes: ByteArray,
+        replacesFileId: Long? = null,
+        clientRequestId: String = Uuid.random().toString(),
+    ): ClaimFileDto = call {
+        val fileName = name.replace('\\', '_').replace('"', '_').replace('\r', '_').replace('\n', '_')
+        val form = MultiPartFormDataContent(formData {
+            append("documentType", documentType)
+            append("clientRequestId", clientRequestId)
+            replacesFileId?.let { append("replacesFileId", it.toString()) }
+            append("file", bytes, headersOf(
+                HttpHeaders.ContentType to listOf(mimeType(name)),
+                HttpHeaders.ContentDisposition to listOf("filename=\"$fileName\""),
+            ))
+        })
+        try {
+            http.post(claimPath(MobileApi.CLAIM_FILES, id)) { setBody(form) }.body()
+        } catch (e: ClientRequestException) {
+            if (e.response.status != HttpStatusCode.UnprocessableEntity) throw e
+            // 422 с ClaimFileDto — результат проверки файла, а не ошибка соединения.
+            val body = e.response.bodyAsText()
+            val file = runCatching { json.decodeFromString<ClaimFileDto>(body) }.getOrNull()
+            file?.takeIf { it.status == FileStatus.REJECTED } ?: throw e
+        }
+    }
+
     /** Страница уведомлений, новые сверху; следующая — с beforeId = nextBeforeId. */
     suspend fun notifications(
         beforeId: Long? = null,
@@ -182,3 +221,11 @@ fun normalizePhone(input: String): String {
         else -> if (input.trim().startsWith("+")) "+$digits" else digits
     }
 }
+
+fun mimeType(name: String): String =
+    when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "pdf" -> "application/pdf"
+        else -> "application/octet-stream"
+    }
