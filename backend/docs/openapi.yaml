@@ -1,0 +1,2964 @@
+# OpenAPI snapshot generated from /openapi.json.
+# Covers application API and /health; Swagger UI assets are not API operations.
+openapi: 3.2.1
+info:
+  title: Т-Страхование Backend API
+  version: 1.0.0
+  description: Вымышленные страховые обращения. Решения о выплатах не принимаются. Даты — ISO 8601. Для мобильного и веб-канала
+    нужны разные JWT; администратор использует веб-вход.
+servers:
+- url: /
+paths:
+  /health:
+    get:
+      summary: Состояние сервера и версия схемы
+      operationId: get_health
+      tags:
+      - Система
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/auth/login:
+    post:
+      summary: Вход
+      operationId: post_api_mobile_auth_login
+      tags:
+      - Клиент
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileLoginRequest'
+  /api/mobile/auth/refresh:
+    post:
+      summary: Ротация refresh-токена
+      operationId: post_api_mobile_auth_refresh
+      tags:
+      - Клиент
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+  /api/mobile/auth/logout:
+    post:
+      summary: Выход и отзыв сессии
+      operationId: post_api_mobile_auth_logout
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '204':
+          description: No content
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+  /api/operator/auth/login:
+    post:
+      summary: Вход
+      operationId: post_api_operator_auth_login
+      tags:
+      - Оператор и администратор
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorLoginRequest'
+  /api/operator/auth/refresh:
+    post:
+      summary: Ротация refresh-токена
+      operationId: post_api_operator_auth_refresh
+      tags:
+      - Оператор и администратор
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+  /api/operator/auth/logout:
+    post:
+      summary: Выход и отзыв сессии
+      operationId: post_api_operator_auth_logout
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '204':
+          description: No content
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Слишком много попыток. Тело может отсутствовать при ограничении частоты.
+          headers:
+            Retry-After:
+              description: Число секунд до повторной попытки
+              schema:
+                type: string
+  /api/mobile/me:
+    get:
+      summary: Профиль
+      operationId: get_api_mobile_me
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/policies:
+    get:
+      summary: Договоры
+      operationId: get_api_mobile_policies
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PolicyDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/event-types:
+    get:
+      summary: Правила форм и документов
+      operationId: get_api_mobile_event_types
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventTypeDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/claims:
+    get:
+      summary: Мои обращения
+      operationId: get_api_mobile_claims
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClaimListItem'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Создать черновик; UUID clientRequestId обеспечивает идемпотентность
+      operationId: post_api_mobile_claims
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetails'
+        '201':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetails'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClaimRequest'
+  /api/mobile/claims/{id}:
+    get:
+      summary: Карточка своего обращения
+      operationId: get_api_mobile_claims__id_
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetails'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      summary: Изменить черновик; при NEEDS_INFO только запрошенные поля; null не изменяет поле
+      operationId: patch_api_mobile_claims__id_
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetails'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClaimRequest'
+  /api/mobile/claims/{id}/completeness:
+    get:
+      summary: Проверка комплектности
+      operationId: get_api_mobile_claims__id__completeness
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletenessDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/claims/{id}/submit:
+    post:
+      summary: Отправить обращение; неполный комплект возвращает NEEDS_INFO
+      operationId: post_api_mobile_claims__id__submit
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetails'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/claims/{id}/timeline:
+    get:
+      summary: Временная шкала
+      operationId: get_api_mobile_claims__id__timeline
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimelineEvent'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/notifications/{id}/read:
+    post:
+      summary: Отметить своё уведомление прочитанным, идемпотентно
+      operationId: post_api_mobile_notifications__id__read
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/notifications:
+    get:
+      summary: Центр уведомлений
+      operationId: get_api_mobile_notifications
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: limit
+        in: query
+        description: 1–100, по умолчанию 20
+        schema:
+          type: integer
+      - name: beforeId
+        in: query
+        description: Курсор nextBeforeId предыдущей страницы
+        schema:
+          type: integer
+      - name: unreadOnly
+        in: query
+        description: По умолчанию false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsPage'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/claims/{id}/files/{fileId}:
+    delete:
+      summary: Удалить файл только из DRAFT
+      operationId: delete_api_mobile_claims__id__files__fileId_
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '204':
+          description: No content
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/mobile/claims/{id}/files:
+    post:
+      summary: 'Загрузить JPEG/PNG/PDF: 201 принят, 200 повтор/дубль, 422 отклонён. Лимиты из event-types; замена через replacesFileId'
+      operationId: post_api_mobile_claims__id__files
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimFileDto'
+        '201':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimFileDto'
+        '422':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimFileDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - documentType
+              - file
+              properties:
+                documentType:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                clientRequestId:
+                  type: string
+                  format: uuid
+                replacesFileId:
+                  type: integer
+                  format: int64
+  /api/mobile/claims/{id}/files/{fileId}/content:
+    get:
+      summary: Содержимое своего файла (JPEG/PNG/PDF)
+      operationId: get_api_mobile_claims__id__files__fileId__content
+      tags:
+      - Клиент
+      security:
+      - MobileBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/me:
+    get:
+      summary: Профиль
+      operationId: get_api_operator_me
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/operators:
+    get:
+      summary: Список операторов (ADMIN)
+      operationId: get_api_operator_operators
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperatorDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/directions:
+    get:
+      summary: Направления
+      operationId: get_api_operator_directions
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DirectionDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/claims/{id}:
+    get:
+      summary: Карточка обращения кроме DRAFT
+      operationId: get_api_operator_claims__id_
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/me/availability:
+    put:
+      summary: Изменить свою смену (OPERATOR)
+      operationId: put_api_operator_me_availability
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityRequest'
+  /api/operator/claims/{id}/take:
+    post:
+      summary: Взять обращение (OPERATOR)
+      operationId: post_api_operator_claims__id__take
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/claims/{id}/start-review:
+    post:
+      summary: Начать рассмотрение своего обращения
+      operationId: post_api_operator_claims__id__start_review
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/claims/{id}/release:
+    post:
+      summary: Вернуть в очередь
+      operationId: post_api_operator_claims__id__release
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseClaimRequest'
+  /api/operator/claims/{id}/assign:
+    post:
+      summary: Назначить или переназначить (ADMIN)
+      operationId: post_api_operator_claims__id__assign
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignClaimRequest'
+  /api/operator/claims/{id}/decisions/confirm:
+    post:
+      summary: Подтвердить DAMAGE, ROUTING или PRIORITY
+      operationId: post_api_operator_claims__id__decisions_confirm
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmDecisionRequest'
+  /api/operator/claims/{id}/decisions/override:
+    post:
+      summary: Исправить DAMAGE, ROUTING или PRIORITY с причиной; история сохраняется
+      operationId: post_api_operator_claims__id__decisions_override
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideDecisionRequest'
+  /api/operator/claims/{id}/request-materials:
+    post:
+      summary: Запросить материалы из IN_REVIEW; ровно documentType или fieldName в каждом item
+      operationId: post_api_operator_claims__id__request_materials
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestMaterialsRequest'
+  /api/operator/claims/{id}/review-result:
+    put:
+      summary: Сохранить итог рассмотрения своего обращения
+      operationId: put_api_operator_claims__id__review_result
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewResultRequest'
+  /api/operator/claims/{id}/complete:
+    post:
+      summary: Завершить после итога текущего рассмотрения
+      operationId: post_api_operator_claims__id__complete
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/claims/{id}/cancel:
+    post:
+      summary: Отменить с внутренней причиной и комментарием клиенту
+      operationId: post_api_operator_claims__id__cancel
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCard'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelClaimRequest'
+  /api/operator/dashboard:
+    get:
+      summary: Нагрузка и показатели (только ADMIN); секунды, доли 0–1, все время
+      operationId: get_api_operator_dashboard
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters: []
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDto'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/queue:
+    get:
+      summary: Очередь обращений
+      operationId: get_api_operator_queue
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: status
+        in: query
+        description: Статусы через запятую; допускается повтор параметра
+        schema:
+          type: string
+      - name: direction
+        in: query
+        description: ''
+        schema:
+          type: string
+      - name: minPriority
+        in: query
+        description: 1–3
+        schema:
+          type: integer
+      - name: assigned
+        in: query
+        description: me или none
+        schema:
+          type: string
+      - name: assignedTo
+        in: query
+        description: ''
+        schema:
+          type: integer
+      - name: eventType
+        in: query
+        description: ''
+        schema:
+          type: string
+      - name: createdFrom
+        in: query
+        description: YYYY-MM-DD включительно
+        schema:
+          type: string
+      - name: createdTo
+        in: query
+        description: YYYY-MM-DD включительно
+        schema:
+          type: string
+      - name: tz
+        in: query
+        description: IANA, например Asia/Krasnoyarsk
+        schema:
+          type: string
+      - name: overdue
+        in: query
+        description: ''
+        schema:
+          type: boolean
+      - name: manualReview
+        in: query
+        description: ''
+        schema:
+          type: boolean
+      - name: search
+        in: query
+        description: ''
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: 1–200, по умолчанию 50
+        schema:
+          type: integer
+      - name: offset
+        in: query
+        description: По умолчанию 0
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/operator/claims/{id}/files/{fileId}/content:
+    get:
+      summary: Содержимое файла обращения (JPEG/PNG/PDF)
+      operationId: get_api_operator_claims__id__files__fileId__content
+      tags:
+      - Оператор и администратор
+      security:
+      - OperatorBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Результат операции
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: 'Ошибка: 400 — данные, 401 — вход, 403 — права, 404 — ресурс, 409 — конфликт, 413 — размер, 500 — сервер'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        schemaVersion:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - status
+      - schemaVersion
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - error
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        accessTokenExpiresIn:
+          type: integer
+          format: int64
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserDto'
+      required:
+      - accessToken
+      - accessTokenExpiresIn
+      - refreshToken
+      - user
+    UserDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum:
+          - CLIENT
+          - OPERATOR
+          - ADMIN
+        fullName:
+          type: string
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+        availability:
+          anyOf:
+          - type: string
+            enum:
+            - ONLINE
+            - BREAK
+            - OFFLINE
+          - type: 'null'
+      required:
+      - id
+      - role
+      - fullName
+      - phone
+      - email
+    MobileLoginRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+        password:
+          type: string
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+      required:
+      - phone
+      - password
+      - device
+    DeviceInfo:
+      type: object
+      properties:
+        installationId:
+          type: string
+        platform:
+          type: string
+          enum:
+          - ANDROID
+          - IOS
+        appVersion:
+          anyOf:
+          - type: string
+          - type: 'null'
+        osVersion:
+          anyOf:
+          - type: string
+          - type: 'null'
+        pushToken:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - installationId
+      - platform
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required:
+      - refreshToken
+    OperatorLoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+      - email
+      - password
+    PolicyDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        policyNumber:
+          type: string
+        product:
+          type: string
+        insuredObject:
+          type: object
+          additionalProperties: true
+        validFrom:
+          type: string
+        validTo:
+          type: string
+      required:
+      - id
+      - policyNumber
+      - product
+      - insuredObject
+      - validFrom
+      - validTo
+    EventTypeDto:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormFieldDto'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormDocumentDto'
+      required:
+      - code
+      - name
+      - fields
+      - documents
+    FormFieldDto:
+      type: object
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        kind:
+          type: string
+          enum:
+          - CORE
+          - DETAIL
+        valueType:
+          type: string
+          enum:
+          - STRING
+          - BOOLEAN
+          - NUMBER
+          - LIST
+        required:
+          type: boolean
+      required:
+      - code
+      - title
+      - kind
+      - valueType
+      - required
+    FormDocumentDto:
+      type: object
+      properties:
+        documentType:
+          type: string
+        name:
+          type: string
+        minCount:
+          type: integer
+          format: int32
+        allowedMimeTypes:
+          type: array
+          items:
+            type: string
+        maxSizeBytes:
+          type: integer
+          format: int64
+      required:
+      - documentType
+      - name
+      - minCount
+      - allowedMimeTypes
+      - maxSizeBytes
+    ClaimListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        claimNumber:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        statusTitle:
+          type: string
+        isFinal:
+          type: boolean
+        eventTypeName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        actionRequired:
+          type: boolean
+        actionMessage:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - id
+      - claimNumber
+      - status
+      - statusTitle
+      - isFinal
+      - eventTypeName
+      - eventAt
+      - createdAt
+      - updatedAt
+      - actionRequired
+      - actionMessage
+    ClaimDetails:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        claimNumber:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        statusTitle:
+          type: string
+        isFinal:
+          type: boolean
+        policyId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        policyNumber:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventTypeName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventLocation:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        contactPhone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDto'
+        details:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        submittedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        openInfoRequest:
+          anyOf:
+          - $ref: '#/components/schemas/InfoRequestDto'
+          - type: 'null'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimFileDto'
+      required:
+      - id
+      - claimNumber
+      - status
+      - statusTitle
+      - isFinal
+      - policyId
+      - policyNumber
+      - eventType
+      - eventTypeName
+      - eventAt
+      - eventLocation
+      - description
+      - contactPhone
+      - participants
+      - details
+      - createdAt
+      - updatedAt
+      - submittedAt
+      - openInfoRequest
+      - files
+    ParticipantDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        role:
+          type: string
+        fullName:
+          type: string
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        vehicle:
+          anyOf:
+          - type: object
+            additionalProperties: true
+          - type: 'null'
+        insurer:
+          anyOf:
+          - type: string
+          - type: 'null'
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - id
+      - role
+      - fullName
+      - phone
+      - vehicle
+      - insurer
+      - note
+    InfoRequestDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        message:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - FULFILLED
+          - CANCELLED
+        dueAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoRequestItemDto'
+      required:
+      - id
+      - message
+      - status
+      - dueAt
+      - createdAt
+      - items
+    InfoRequestItemDto:
+      type: object
+      properties:
+        documentType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        documentTypeName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        fieldName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        minCount:
+          type: integer
+          format: int32
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+        issue:
+          type: string
+          enum:
+          - MISSING
+          - INVALID_FORMAT
+          - LOW_QUALITY
+        hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+        fileId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        isFulfilled:
+          type: boolean
+      required:
+      - documentType
+      - documentTypeName
+      - fieldName
+      - minCount
+      - comment
+      - issue
+      - hint
+      - fileId
+      - isFulfilled
+    ClaimFileDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+        documentTypeName:
+          type: string
+        originalName:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+          - UPLOADED
+          - ACCEPTED
+          - REJECTED
+          - DUPLICATE
+          - REPLACED
+          - DELETED
+        rejectionReason:
+          anyOf:
+          - type: string
+            enum:
+            - UNSUPPORTED_FORMAT
+            - CORRUPTED
+            - TOO_MANY_PIXELS
+            - ACTIVE_CONTENT
+            - LOW_QUALITY
+          - type: 'null'
+        uploadedAt:
+          type: string
+        hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+        duplicateOfFileId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+      required:
+      - id
+      - documentType
+      - documentTypeName
+      - originalName
+      - mimeType
+      - sizeBytes
+      - status
+      - rejectionReason
+      - uploadedAt
+    CreateClaimRequest:
+      type: object
+      properties:
+        policyId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        eventType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventLocation:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        contactPhone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        participants:
+          anyOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/ParticipantInput'
+          - type: 'null'
+        details:
+          anyOf:
+          - type: object
+            additionalProperties: true
+          - type: 'null'
+        clientRequestId:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required: []
+    ParticipantInput:
+      type: object
+      properties:
+        role:
+          type: string
+        fullName:
+          type: string
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        vehicle:
+          anyOf:
+          - type: object
+            additionalProperties: true
+          - type: 'null'
+        insurer:
+          anyOf:
+          - type: string
+          - type: 'null'
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - role
+      - fullName
+    UpdateClaimRequest:
+      type: object
+      properties:
+        policyId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        eventType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventLocation:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        contactPhone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        participants:
+          anyOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/ParticipantInput'
+          - type: 'null'
+        details:
+          anyOf:
+          - type: object
+            additionalProperties: true
+          - type: 'null'
+      required: []
+    CompletenessDto:
+      type: object
+      properties:
+        complete:
+          type: boolean
+        missingFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingFieldDto'
+        missingDocuments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingDocumentDto'
+        problemFiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemFileDto'
+      required:
+      - complete
+      - missingFields
+      - missingDocuments
+      - problemFiles
+    MissingFieldDto:
+      type: object
+      properties:
+        field:
+          type: string
+        title:
+          type: string
+      required:
+      - field
+      - title
+    MissingDocumentDto:
+      type: object
+      properties:
+        documentType:
+          type: string
+        documentTypeName:
+          type: string
+        required:
+          type: integer
+          format: int32
+        uploaded:
+          type: integer
+          format: int32
+      required:
+      - documentType
+      - documentTypeName
+      - required
+      - uploaded
+    ProblemFileDto:
+      type: object
+      properties:
+        fileId:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+        issue:
+          type: string
+          enum:
+          - MISSING
+          - INVALID_FORMAT
+          - LOW_QUALITY
+        reason:
+          anyOf:
+          - type: string
+            enum:
+            - UNSUPPORTED_FORMAT
+            - CORRUPTED
+            - TOO_MANY_PIXELS
+            - ACTIVE_CONTENT
+            - LOW_QUALITY
+          - type: 'null'
+      required:
+      - fileId
+      - documentType
+      - issue
+      - reason
+    TimelineEvent:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        title:
+          type: string
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+        at:
+          type: string
+      required:
+      - status
+      - title
+      - comment
+      - at
+    NotificationDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        claimId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        type:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+        readAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - id
+      - claimId
+      - type
+      - title
+      - body
+      - createdAt
+      - readAt
+    NotificationsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationDto'
+        nextBeforeId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+      required:
+      - items
+      - nextBeforeId
+    OperatorDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fullName:
+          type: string
+        availability:
+          anyOf:
+          - type: string
+            enum:
+            - ONLINE
+            - BREAK
+            - OFFLINE
+          - type: 'null'
+        directions:
+          type: array
+          items:
+            type: string
+        activeClaims:
+          type: integer
+          format: int32
+        maxActiveClaims:
+          type: integer
+          format: int32
+      required:
+      - id
+      - fullName
+      - availability
+      - directions
+      - activeClaims
+      - maxActiveClaims
+    DirectionDto:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - code
+      - name
+      - description
+    ClaimCard:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        claimNumber:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        statusTitle:
+          type: string
+        eventType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventTypeName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventLocation:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        contactPhone:
+          anyOf:
+          - type: string
+          - type: 'null'
+        directionCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+        priority:
+          anyOf:
+          - type: integer
+            format: int32
+          - type: 'null'
+        requiresManualReview:
+          type: boolean
+        assignedOperator:
+          anyOf:
+          - $ref: '#/components/schemas/UserDto'
+          - type: 'null'
+        duplicateOfClaimId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        statusChangedAt:
+          type: string
+        dueAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        isOverdue:
+          type: boolean
+        details:
+          type: object
+          additionalProperties: true
+        submittedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        version:
+          type: integer
+          format: int32
+        client:
+          $ref: '#/components/schemas/UserDto'
+        policy:
+          anyOf:
+          - $ref: '#/components/schemas/PolicyDto'
+          - type: 'null'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDto'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorFileDto'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionDto'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusHistoryDto'
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentDto'
+        infoRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoRequestDto'
+      required:
+      - id
+      - claimNumber
+      - status
+      - statusTitle
+      - eventType
+      - eventTypeName
+      - eventAt
+      - eventLocation
+      - description
+      - contactPhone
+      - directionCode
+      - priority
+      - requiresManualReview
+      - assignedOperator
+      - duplicateOfClaimId
+      - statusChangedAt
+      - dueAt
+      - isOverdue
+      - details
+      - submittedAt
+      - createdAt
+      - updatedAt
+      - version
+      - client
+      - policy
+      - participants
+      - files
+      - decisions
+      - history
+      - comments
+      - infoRequests
+    OperatorFileDto:
+      type: object
+      properties:
+        file:
+          $ref: '#/components/schemas/ClaimFileDto'
+        analysisStatus:
+          type: string
+          enum:
+          - NOT_REQUIRED
+          - PENDING
+          - DONE
+          - FAILED
+        analysis:
+          anyOf:
+          - $ref: '#/components/schemas/ImageAnalysisDto'
+          - type: 'null'
+        foundInOtherClaim:
+          anyOf:
+          - $ref: '#/components/schemas/SimilarFileDto'
+          - type: 'null'
+      required:
+      - file
+      - analysisStatus
+      - analysis
+    ImageAnalysisDto:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+        qualityOk:
+          type: boolean
+        qualityScore:
+          anyOf:
+          - type: number
+          - type: 'null'
+        qualityIssues:
+          type: array
+          items:
+            type: string
+        damageDetected:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+        damageType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        damageConfidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+        carPart:
+          anyOf:
+          - type: string
+          - type: 'null'
+        damageArea:
+          anyOf:
+          - {}
+          - type: 'null'
+        createdAt:
+          type: string
+      required:
+      - modelVersion
+      - qualityOk
+      - qualityScore
+      - qualityIssues
+      - damageDetected
+      - damageType
+      - damageConfidence
+      - carPart
+      - damageArea
+      - createdAt
+    SimilarFileDto:
+      type: object
+      properties:
+        claimId:
+          type: integer
+          format: int64
+        claimNumber:
+          type: string
+        fileId:
+          type: integer
+          format: int64
+        match:
+          type: string
+          enum:
+          - EXACT
+          - SIMILAR
+      required:
+      - claimId
+      - claimNumber
+      - fileId
+      - match
+    DecisionDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum:
+          - COMPLETENESS
+          - DUPLICATE
+          - DAMAGE
+          - ROUTING
+          - PRIORITY
+          - REVIEW_RESULT
+        source:
+          type: string
+          enum:
+          - SYSTEM
+          - OPERATOR
+        action:
+          type: string
+          enum:
+          - SET
+          - CONFIRM
+          - OVERRIDE
+        value: {}
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+        ruleVersion:
+          anyOf:
+          - type: string
+          - type: 'null'
+        supersedesId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        isCurrent:
+          type: boolean
+        createdBy:
+          anyOf:
+          - type: string
+          - type: 'null'
+        createdAt:
+          type: string
+      required:
+      - id
+      - kind
+      - source
+      - action
+      - value
+      - confidence
+      - reason
+      - ruleVersion
+      - supersedesId
+      - isCurrent
+      - createdBy
+      - createdAt
+    StatusHistoryDto:
+      type: object
+      properties:
+        fromStatus:
+          anyOf:
+          - type: string
+            enum:
+            - DRAFT
+            - SUBMITTED
+            - NEEDS_INFO
+            - IN_ANALYSIS
+            - QUEUED
+            - ASSIGNED
+            - IN_REVIEW
+            - COMPLETED
+            - CANCELLED
+          - type: 'null'
+        toStatus:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        actorType:
+          type: string
+          enum:
+          - SYSTEM
+          - CLIENT
+          - OPERATOR
+          - ADMIN
+        actorName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+        clientTitle:
+          anyOf:
+          - type: string
+          - type: 'null'
+        clientComment:
+          anyOf:
+          - type: string
+          - type: 'null'
+        visibleToClient:
+          type: boolean
+        at:
+          type: string
+      required:
+      - fromStatus
+      - toStatus
+      - actorType
+      - actorName
+      - reason
+      - clientTitle
+      - clientComment
+      - visibleToClient
+      - at
+    CommentDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        authorName:
+          type: string
+        visibility:
+          type: string
+          enum:
+          - INTERNAL
+          - CLIENT
+        body:
+          type: string
+        createdAt:
+          type: string
+      required:
+      - id
+      - authorName
+      - visibility
+      - body
+      - createdAt
+    AvailabilityRequest:
+      type: object
+      properties:
+        availability:
+          type: string
+          enum:
+          - ONLINE
+          - BREAK
+          - OFFLINE
+      required:
+      - availability
+    ReleaseClaimRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+      required:
+      - reason
+    AssignClaimRequest:
+      type: object
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+        reason:
+          type: string
+      required:
+      - operatorId
+      - reason
+    ConfirmDecisionRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - COMPLETENESS
+          - DUPLICATE
+          - DAMAGE
+          - ROUTING
+          - PRIORITY
+          - REVIEW_RESULT
+      required:
+      - kind
+    OverrideDecisionRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - COMPLETENESS
+          - DUPLICATE
+          - DAMAGE
+          - ROUTING
+          - PRIORITY
+          - REVIEW_RESULT
+        reason:
+          type: string
+        priority:
+          anyOf:
+          - type: integer
+            format: int32
+          - type: 'null'
+        direction:
+          anyOf:
+          - type: string
+          - type: 'null'
+        damageType:
+          anyOf:
+          - type: string
+            enum:
+            - SCRATCH
+            - DENT
+            - BROKEN_GLASS
+            - BUMPER_DAMAGE
+            - HEADLIGHT_DAMAGE
+          - type: 'null'
+      required:
+      - kind
+      - reason
+    RequestMaterialsRequest:
+      type: object
+      properties:
+        message:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestedMaterial'
+      required:
+      - message
+      - items
+    RequestedMaterial:
+      type: object
+      properties:
+        documentType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        fieldName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        fileId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        minCount:
+          type: integer
+          format: int32
+        comment:
+          type: string
+      required:
+      - comment
+    ReviewResultRequest:
+      type: object
+      properties:
+        summary:
+          type: string
+        clientComment:
+          type: string
+      required:
+      - summary
+      - clientComment
+    CancelClaimRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        clientComment:
+          type: string
+      required:
+      - reason
+      - clientComment
+    DashboardDto:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+        queues:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueLoadDto'
+        operators:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorDto'
+        metrics:
+          $ref: '#/components/schemas/ProcessingMetricsDto'
+        overloadWarning:
+          type: boolean
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardRecommendation'
+        queuedThreshold:
+          type: integer
+          format: int32
+        overdueThreshold:
+          type: integer
+          format: int32
+      required:
+      - generatedAt
+      - queues
+      - operators
+      - metrics
+      - overloadWarning
+      - recommendations
+      - queuedThreshold
+      - overdueThreshold
+    QueueLoadDto:
+      type: object
+      properties:
+        directionCode:
+          type: string
+        queued:
+          type: integer
+          format: int64
+        queuedUrgent:
+          type: integer
+          format: int64
+        overdue:
+          type: integer
+          format: int64
+        oldestQueuedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        overloadWarning:
+          type: boolean
+      required:
+      - directionCode
+      - queued
+      - queuedUrgent
+      - overdue
+      - oldestQueuedAt
+    ProcessingMetricsDto:
+      type: object
+      properties:
+        submittedClaims:
+          type: integer
+          format: int64
+        assignedSamples:
+          type: integer
+          format: int64
+        averageFirstAssignmentSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+        completedSamples:
+          type: integer
+          format: int64
+        averageCompletionSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+        needsInfoClaims:
+          type: integer
+          format: int64
+        needsInfoShare:
+          anyOf:
+          - type: number
+          - type: 'null'
+      required:
+      - submittedClaims
+      - assignedSamples
+      - averageFirstAssignmentSeconds
+      - completedSamples
+      - averageCompletionSeconds
+      - needsInfoClaims
+      - needsInfoShare
+    DashboardRecommendation:
+      type: object
+      properties:
+        code:
+          type: string
+        directionCode:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+      - directionCode
+      - message
+    Page:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int64
+      required:
+      - items
+      - total
+      - limit
+      - offset
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        claimNumber:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NEEDS_INFO
+          - IN_ANALYSIS
+          - QUEUED
+          - ASSIGNED
+          - IN_REVIEW
+          - COMPLETED
+          - CANCELLED
+        directionCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+        directionName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        priority:
+          anyOf:
+          - type: integer
+            format: int32
+          - type: 'null'
+        requiresManualReview:
+          type: boolean
+        eventType:
+          anyOf:
+          - type: string
+          - type: 'null'
+        eventTypeName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        clientName:
+          type: string
+        policyNumber:
+          anyOf:
+          - type: string
+          - type: 'null'
+        assignedOperatorId:
+          anyOf:
+          - type: integer
+            format: int64
+          - type: 'null'
+        assignedOperatorName:
+          anyOf:
+          - type: string
+          - type: 'null'
+        submittedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        createdAt:
+          type: string
+        statusChangedAt:
+          type: string
+        dueAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+        isOverdue:
+          type: boolean
+        filesCount:
+          type: integer
+          format: int64
+        analysesPending:
+          type: integer
+          format: int64
+        hasDuplicate:
+          type: boolean
+        updatedAt:
+          type: string
+      required:
+      - id
+      - claimNumber
+      - status
+      - directionCode
+      - directionName
+      - priority
+      - requiresManualReview
+      - eventType
+      - eventTypeName
+      - clientName
+      - policyNumber
+      - assignedOperatorId
+      - assignedOperatorName
+      - submittedAt
+      - createdAt
+      - statusChangedAt
+      - dueAt
+      - isOverdue
+      - filesCount
+      - analysesPending
+      - hasDuplicate
+      - updatedAt
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT мобильного входа
+    OperatorBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT веб-входа; для dashboard и assign требуется ADMIN

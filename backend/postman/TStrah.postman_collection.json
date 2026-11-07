@@ -1,0 +1,2284 @@
+{
+  "info": {
+    "name": "Т-Страхование API",
+    "_postman_id": "6c1f6f0e-tstrah-api",
+    "description": "Проверка бэкенда. Порядок: Health → папка 1 (начни с «Вход по телефону») → папка 2 (начни с «Вход по email») → папка 3.\nТестовые учётки — server/src/main/kotlin/.../demo/DemoData.kt.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health — сервер и БД живы",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Мобильное приложение (клиент)",
+      "item": [
+        {
+          "name": "Вход по телефону",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{clientPhone}}\",\n  \"password\": \"{{demoPassword}}\",\n  \"device\": {\n    \"installationId\": \"postman-device-1\",\n    \"platform\": \"ANDROID\",\n    \"appVersion\": \"0.1.0\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Сохраняет mobileToken и mobileRefreshToken в переменные коллекции. Номер можно писать в любом формате: 8 900 000-00-01 / +7 (900) 000-00-01."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set(\"mobileToken\", d.accessToken);",
+                  "pm.collectionVariables.set(\"mobileRefreshToken\", d.refreshToken);",
+                  "pm.test(\"Роль CLIENT\", () => pm.expect(d.user.role).to.eql(\"CLIENT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мой профиль",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мои полисы",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/policies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "policies"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "if (list.length) pm.collectionVariables.set(\"policyId\", list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Типы событий (правила формы)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/event-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "event-types"
+              ]
+            },
+            "description": "Какие поля и документы нужны для каждого типа события (вопрос 7). По этому ответу приложение строит форму."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать черновик обращения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"policyId\": \"{{policyId}}\",\n  \"eventType\": \"CAR_GLASS\",\n  \"eventAt\": \"2026-10-09T18:30:00+07:00\",\n  \"eventLocation\": \"Новосибирск, ул. Ленина, 1\",\n  \"description\": \"Скол на лобовом стекле\",\n  \"clientRequestId\": \"{{$guid}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "eventType: CAR_ACCIDENT | CAR_DAMAGE | CAR_GLASS. clientRequestId — UUID от приложения; повторная отправка с тем же значением вернёт то же обращение (200), а не создаст дубль."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set(\"claimId\", d.id);",
+                  "pm.test(\"Статус DRAFT\", () => pm.expect(d.status).to.eql(\"DRAFT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Чего не хватает (completeness)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}/completeness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}",
+                "completeness"
+              ]
+            },
+            "description": "Чек-лист до отправки: какие поля и документы ещё нужны. Ничего не меняет."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "console.log(\"complete:\", d.complete, d.missingFields, d.missingDocuments);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Дозаполнить черновик (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}"
+              ]
+            },
+            "description": "Правка в статусе DRAFT или NEEDS_INFO. Передаются только меняемые поля.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventLocation\": \"Новосибирск, ул. Ленина, 1\",\n  \"description\": \"Скол на лобовом стекле от камня\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Загрузить фото (выберите файл)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documentType",
+                  "value": "DAMAGE_PHOTO",
+                  "type": "text",
+                  "description": "DAMAGE_PHOTO | ACCIDENT_NOTICE | OTHER … (список — GET /event-types)"
+                },
+                {
+                  "key": "clientRequestId",
+                  "value": "{{$guid}}",
+                  "type": "text",
+                  "description": "повтор с тем же UUID вернёт тот же файл (200), а не копию"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Нажмите Select Files и выберите JPEG/PNG (для ACCIDENT_NOTICE можно PDF)"
+                },
+                {
+                  "key": "replacesFileId",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true,
+                  "description": "id отклонённого файла, если это замена"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}",
+                "files"
+              ]
+            },
+            "description": "Во вкладке Body у поля file нажмите Select Files. Ответы: 201 принят, 200 дубль/повтор, 422 не принят (rejectionReason + hint), 413 слишком большой. Формат проверяется по содержимому, EXIF/GPS удаляются."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201/200 — принят или дубль; 422 — отклонён с подсказкой\", () => pm.expect([200, 201, 422]).to.include(pm.response.code));",
+                  "const d = pm.response.json();",
+                  "if (d.id) pm.collectionVariables.set(\"fileId\", d.id);",
+                  "console.log(\"file:\", d.status, d.rejectionReason || \"\", d.hint || \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Скачать свой файл",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}/files/{{fileId}}/content",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}",
+                "files",
+                "{{fileId}}",
+                "content"
+              ]
+            },
+            "description": "Отдаёт уже очищенный файл (без EXIF/GPS). Чужой файл → 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"nosniff\", () => pm.expect(pm.response.headers.get(\"X-Content-Type-Options\")).to.eql(\"nosniff\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить обращение (submit)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}",
+                "submit"
+              ]
+            },
+            "description": "Без всех нужных документов обращение уйдёт в NEEDS_INFO со списком недостающего, с полным комплектом — в IN_ANALYSIS. Повторная отправка уже отправленного → 409."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test(\"NEEDS_INFO или IN_ANALYSIS\", () => pm.expect([\"NEEDS_INFO\",\"IN_ANALYSIS\"]).to.include(d.status));",
+                  "console.log(\"status:\", d.status, d.openInfoRequest && d.openInfoRequest.items);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мои обращения",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Обращение (экран)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Временная шкала",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{claimId}}/timeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{claimId}}",
+                "timeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Обновить токен (refresh)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{mobileRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Старый refreshToken после этого перестаёт работать (повторный вызов с ним вернёт 401)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set(\"mobileToken\", d.accessToken);",
+                  "pm.collectionVariables.set(\"mobileRefreshToken\", d.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{mobileToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "description": "Сначала выполни «Вход по телефону» — токен подставится во все остальные запросы папки автоматически."
+    },
+    {
+      "name": "2. Веб оператора",
+      "item": [
+        {
+          "name": "Вход по email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set(\"operatorToken\", d.accessToken);",
+                  "pm.collectionVariables.set(\"operatorRefreshToken\", d.refreshToken);",
+                  "pm.test(\"Роль OPERATOR/ADMIN\", () => pm.expect([\"OPERATOR\", \"ADMIN\"]).to.include(d.user.role));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мой профиль",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь (активные)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "QUEUED",
+                  "disabled": true,
+                  "description": "Можно несколько: status=QUEUED&status=IN_REVIEW"
+                },
+                {
+                  "key": "direction",
+                  "value": "MANUAL_REVIEW",
+                  "disabled": true,
+                  "description": "AUTO_SIMPLE | AUTO_COMPLEX | GLASS | MANUAL_REVIEW"
+                },
+                {
+                  "key": "minPriority",
+                  "value": "3",
+                  "disabled": true,
+                  "description": "1 низкий … 4 критический"
+                },
+                {
+                  "key": "assigned",
+                  "value": "me",
+                  "disabled": true,
+                  "description": "me — мои, none — неназначенные"
+                },
+                {
+                  "key": "overdue",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "только просроченные"
+                },
+                {
+                  "key": "manualReview",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "только сомнительные"
+                },
+                {
+                  "key": "search",
+                  "value": "TS-000",
+                  "disabled": true,
+                  "description": "номер обращения, полиса или имя клиента"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Фильтры включаются галочками во вкладке Params. Первый элемент сохраняется в operatorClaimId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "if (d.items.length) pm.collectionVariables.set(\"operatorClaimId\", d.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь: только сомнительные",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?manualReview=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "manualReview",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь: мои обращения",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?assigned=me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "assigned",
+                  "value": "me"
+                }
+              ]
+            },
+            "description": "У operator2 здесь обращение в работе с исправлением решения системы."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь: за период (пояс оператора)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?createdFrom=2026-10-01&createdTo=2026-12-31&tz=Asia/Novosibirsk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "createdFrom",
+                  "value": "2026-10-01"
+                },
+                {
+                  "key": "createdTo",
+                  "value": "2026-12-31"
+                },
+                {
+                  "key": "tz",
+                  "value": "Asia/Novosibirsk"
+                }
+              ]
+            },
+            "description": "Границы дней считаются в поясе tz (IANA). Фронтенд берёт его из Intl.DateTimeFormat().resolvedOptions().timeZone. Без tz — пояс сервера из APP_TIME_ZONE (по умолчанию Europe/Moscow)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Карточка случая",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}"
+              ]
+            },
+            "description": "Решения системы и исправления оператора: поле decisions (source SYSTEM/OPERATOR, supersedesId). У файлов: analysisStatus, analysis и foundInOtherClaim — снимок уже встречался в другом обращении (EXACT / SIMILAR). Первый принятый файл сохраняется в operatorFileId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const f = d.files.find(x => x.file.status === \"ACCEPTED\");",
+                  "if (f) pm.collectionVariables.set(\"operatorFileId\", f.file.id);",
+                  "d.files.filter(x => x.foundInOtherClaim).forEach(x => console.log(\"снимок есть в другом обращении:\", x.foundInOtherClaim));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Файл обращения",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/files/{{operatorFileId}}/content",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "files",
+                "{{operatorFileId}}",
+                "content"
+              ]
+            },
+            "description": "Доступны принятые, заменённые и отклонённые анализом фото. Если в карточке нет файлов — 404 (у демо-обращений файлов нет: загрузите их в разделе 1 и отправьте обращение)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 или 404, если у обращения нет файлов\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Направления (для формы исправления)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/directions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "directions"
+              ]
+            },
+            "description": "Коды направлений для исправления решения ROUTING: STANDARD, MANUAL_REVIEW."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Мои обращения в работе",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue?assigned=me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "assigned",
+                  "value": "me"
+                }
+              ]
+            },
+            "description": "Решения меняет оператор, которому назначено обращение. У demo-оператора operator2 это обращение в статусе IN_REVIEW; его id сохраняется в myClaimId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items;",
+                  "if (items.length) pm.collectionVariables.set(\"myClaimId\", items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подтвердить вид повреждения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{myClaimId}}/decisions/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{myClaimId}}",
+                "decisions",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"DAMAGE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Оператор согласен с решением системы (kind: DAMAGE, ROUTING или PRIORITY). Причина не нужна. Ответ — обновлённая карточка. Повторный запуск — 409: решение уже проверено."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 409 при повторном запуске\", () => pm.expect([200, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Исправить направление (с причиной)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{myClaimId}}/decisions/override",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{myClaimId}}",
+                "decisions",
+                "override"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"ROUTING\",\n  \"direction\": \"MANUAL_REVIEW\",\n  \"reason\": \"Повреждены несколько деталей — нужна проверка эксперта\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Причина обязательна. Для PRIORITY — поле priority (1–3), для DAMAGE — damageType (SCRATCH, DENT, BROKEN_GLASS, BUMPER_DAMAGE, HEADLIGHT_DAMAGE). Исходное решение остаётся в карточке с isCurrent=false. Повторный запуск с тем же значением — 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 400 при повторном запуске\", () => pm.expect([200, 400]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const routing = pm.response.json().decisions.find(d => d.kind === \"ROUTING\" && d.isCurrent);",
+                  "  pm.test(\"решение исправлено оператором\", () => pm.expect(routing.action).to.eql(\"OVERRIDE\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Выйти на смену (ONLINE)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me",
+                "availability"
+              ]
+            },
+            "description": "ONLINE — система сразу назначает обращения из очереди направлений оператора (до лимита). BREAK и OFFLINE — новые не назначаются. Демо-операторы стартуют в OFFLINE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"ONLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Взять в работу",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/take",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "take"
+              ]
+            },
+            "description": "QUEUED → ASSIGNED на себя. 409 — обращение уже взял другой оператор (или его назначила система при выходе на смену) либо достигнут лимит; 403 — чужое направление."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, или 409 если обращение уже в работе\", () => pm.expect([200, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Начать рассмотрение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/start-review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "start-review"
+              ]
+            },
+            "description": "ASSIGNED → IN_REVIEW, только назначенный оператор."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, 403 или 409 — зависит от того, кому назначено обращение\", () => pm.expect([200, 403, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вернуть в очередь",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{operatorClaimId}}/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{operatorClaimId}}",
+                "release"
+              ]
+            },
+            "description": "ASSIGNED/IN_REVIEW → QUEUED, причина обязательна. Обращение сразу предлагается другому оператору на смене.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Нужна консультация старшего специалиста\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200, 403 или 409 — зависит от того, кому назначено обращение\", () => pm.expect([200, 403, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Уйти со смены (OFFLINE)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me",
+                "availability"
+              ]
+            },
+            "description": "Новые обращения не назначаются; уже взятые остаются у оператора.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Обновить токен (refresh)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{operatorRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set(\"operatorToken\", d.accessToken);",
+                  "pm.collectionVariables.set(\"operatorRefreshToken\", d.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{operatorToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "description": "Сначала выполни «Вход по email»."
+    },
+    {
+      "name": "3. Проверки доступа (должны вернуть ошибку)",
+      "item": [
+        {
+          "name": "Клиент лезет в очередь оператора → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "queue"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Без токена → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Неверный пароль → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{clientPhone}}\",\n  \"password\": \"wrong-password\",\n  \"device\": {\n    \"installationId\": \"postman-device-1\",\n    \"platform\": \"ANDROID\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Чужое обращение → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{foreignClaimId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{foreignClaimId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Под Иваном (+79000000001) открываем обращение Анны. foreignClaimId=3 — обращение Анны в тестовых данных."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Выход (запускать последним)",
+      "item": [
+        {
+          "name": "Выход клиента",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "auth",
+                "logout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204 No Content\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "После выхода токен клиента не работает → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "me"
+              ]
+            },
+            "description": "Access-токен отзывается сразу при выходе, а не через 15 минут."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Выход оператора",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "auth",
+                "logout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204 No Content\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "После выхода токен оператора не работает → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "После выхода токены сразу перестают работать. Чтобы продолжить — снова «Вход» в разделах 1 и 2."
+    },
+    {
+      "name": "Дополнительно: удаление файла из черновика (отдельный запуск)",
+      "item": [
+        {
+          "name": "Удалить лишний файл из черновика",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobileToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/claims/{{draftClaimId}}/files/{{draftFileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mobile",
+                "claims",
+                "{{draftClaimId}}",
+                "files",
+                "{{draftFileId}}"
+              ]
+            },
+            "description": "Запускайте отдельно: укажите draftClaimId и draftFileId собственного черновика. После отправки обращения удаление запрещено (409)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"draftClaimId\") || !pm.variables.get(\"draftFileId\")) {",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Файл удалён\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Действия оператора (запускайте отдельно)",
+      "description": "Войдите оператором. Задайте actionClaimId и runOperatorActions=true. Запускайте запросы по одному: отмена и завершение — альтернативы; после запроса материалов сначала нужен ответ клиента.",
+      "item": [
+        {
+          "name": "Запросить дополнительные материалы",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{actionClaimId}}/request-materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{actionClaimId}}",
+                "request-materials"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Добавьте общий вид автомобиля\",\n  \"items\": [\n    {\n      \"documentType\": \"DAMAGE_PHOTO\",\n      \"minCount\": 1,\n      \"comment\": \"Нужен дополнительный общий снимок\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.variables.get(\"runOperatorActions\") !== \"true\" || !pm.variables.get(\"actionClaimId\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Действие выполнено\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Сохранить итог рассмотрения",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{actionClaimId}}/review-result",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{actionClaimId}}",
+                "review-result"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"summary\": \"Материалы проверены специалистом\",\n  \"clientComment\": \"Рассмотрение материалов завершено\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.variables.get(\"runOperatorActions\") !== \"true\" || !pm.variables.get(\"actionClaimId\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Действие выполнено\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Завершить обращение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{actionClaimId}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{actionClaimId}}",
+                "complete"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.variables.get(\"runOperatorActions\") !== \"true\" || !pm.variables.get(\"actionClaimId\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Действие выполнено\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Закрыть без обработки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/claims/{{actionClaimId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "claims",
+                "{{actionClaimId}}",
+                "cancel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Повторное обращение\",\n  \"clientComment\": \"Обращение закрыто без обработки: материалы уже рассматриваются\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.variables.get(\"runOperatorActions\") !== \"true\" || !pm.variables.get(\"actionClaimId\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Действие выполнено\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Уведомления",
+      "item": [
+        {
+          "name": "Мои уведомления",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/mobile/notifications?limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.collectionVariables.set(\"notificationId\", pm.response.json().items[0]?.id || \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Прочитать уведомление",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mobileToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/mobile/notifications/{{notificationId}}/read"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"notificationId\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. OpenAPI",
+      "item": [
+        {
+          "name": "Спецификация OpenAPI",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/openapi.json",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"OpenAPI 3.2\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().openapi).to.eql(\"3.2.1\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Администрирование",
+      "item": [
+        {
+          "name": "Вход администратора",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/operator/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.collectionVariables.set(\"adminToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Нагрузка и показатели",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/operator/dashboard",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Dashboard\", () => { const data = pm.response.json(); pm.expect(data.queues).to.be.an(\"array\"); pm.expect(data.metrics).to.be.an(\"object\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "clientPhone",
+      "value": "+79000000001"
+    },
+    {
+      "key": "operatorEmail",
+      "value": "operator2@tstrah.test"
+    },
+    {
+      "key": "demoPassword",
+      "value": "demo12345"
+    },
+    {
+      "key": "foreignClaimId",
+      "value": "3"
+    },
+    {
+      "key": "mobileToken",
+      "value": ""
+    },
+    {
+      "key": "mobileRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "operatorToken",
+      "value": ""
+    },
+    {
+      "key": "operatorRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "policyId",
+      "value": ""
+    },
+    {
+      "key": "claimId",
+      "value": ""
+    },
+    {
+      "key": "operatorClaimId",
+      "value": ""
+    },
+    {
+      "key": "fileId",
+      "value": ""
+    },
+    {
+      "key": "operatorFileId",
+      "value": ""
+    },
+    {
+      "key": "myClaimId",
+      "value": ""
+    },
+    {
+      "key": "draftClaimId",
+      "value": ""
+    },
+    {
+      "key": "draftFileId",
+      "value": ""
+    },
+    {
+      "key": "actionClaimId",
+      "value": ""
+    },
+    {
+      "key": "runOperatorActions",
+      "value": "false"
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@tstrah.test"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    }
+  ]
+}
