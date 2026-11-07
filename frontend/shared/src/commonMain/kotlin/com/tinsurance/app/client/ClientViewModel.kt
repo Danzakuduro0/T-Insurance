@@ -22,6 +22,7 @@ import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.CompletenessDto
 import ru.tinsurance.api.mobile.CreateClaimRequest
 import ru.tinsurance.api.mobile.EventTypeDto
 import ru.tinsurance.api.mobile.NotificationDto
@@ -70,6 +71,17 @@ data class DraftState(
     val error: String? = null,
 ) {
     val selectedType get() = eventTypes.find { it.code == form.eventType }
+}
+
+/** Экран 06: проверка полноты черновика и отправка. */
+data class ReviewState(
+    val loading: Boolean = false,
+    val sending: Boolean = false,
+    val completeness: CompletenessDto? = null,
+    val error: String? = null,
+) {
+    /** Без основных полей сервер отправку не примет (400) — кнопку не даём. */
+    val blocked get() = completeness?.missingFields?.isNotEmpty() == true
 }
 
 // ReplyState, UploadedFile, isTextField и fieldsUpdate — в ReplyState.kt.
@@ -255,6 +267,54 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         }
     }
 
+    // ---- Экраны 05–07: проверка и отправка ----
+
+    var review by mutableStateOf(ReviewState())
+        private set
+
+    /** Экран 06: что сервер посчитает неполным, плюс свежие данные черновика для сводки. */
+    fun loadReview() {
+        val claimId = claim.id ?: return
+        review = ReviewState(loading = true)
+        viewModelScope.launch {
+            review =
+                try {
+                    coroutineScope {
+                        val check = async { api.completeness(claimId) }
+                        refreshClaimDetails()
+                        ReviewState(completeness = check.await())
+                    }
+                } catch (e: ApiException) {
+                    checkSession(e)
+                    ReviewState(error = e.message)
+                }
+        }
+    }
+
+    /**
+     * Экран 06 → 07. Без части документов сервер всё равно примет обращение и сразу запросит
+     * недостающее — экран 07 покажет это по статусу.
+     */
+    fun submitDraft(onSent: () -> Unit) {
+        val claimId = claim.id ?: return
+        if (review.sending) return
+        review = review.copy(sending = true, error = null)
+        viewModelScope.launch {
+            try {
+                api.submit(claimId)
+                review = ReviewState()
+                draft = DraftState(eventTypes = draft.eventTypes)
+                reply = ReplyState()
+                // Экран 07 показывает номер, новый статус и первые шаги истории.
+                openClaim(claimId)
+                onSent()
+            } catch (e: ApiException) {
+                checkSession(e)
+                review = review.copy(sending = false, error = e.message)
+            }
+        }
+    }
+
     private fun persist(onSaved: () -> Unit, save: suspend (claimId: Long?) -> ClaimDetails?) {
         if (draft.saving) return
         draft = draft.copy(saving = true, error = null)
@@ -344,6 +404,7 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         claims = ClaimsState()
         notifications = NotificationsState()
         draft = DraftState()
+        review = ReviewState()
         openClaim(null)
     }
 
