@@ -1,0 +1,56 @@
+@startuml 16_seq_auth
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Аутентификация: JWT и одноразовый refresh
+
+actor "Пользователь" as U
+participant "KMP-приложение\n(Mobile / Web)" as APP
+participant "Ktor API\n(Auth)" as API
+database "PostgreSQL\n(пользователи, сессии)" as DB
+
+autonumber
+== Вход ==
+U -> APP : вводит данные\n(клиент — телефон, оператор / админ — email)
+APP -> API : запрос входа
+API -> DB : найти пользователя, проверить учётные данные
+alt слишком много неудачных попыток
+  API --> APP : ошибка TOO_MANY_ATTEMPTS
+else пользователь заблокирован или данные неверны
+  API --> APP : отказ в доступе
+else успешно
+  API -> DB : создать сессию
+  API --> APP : access-токен (15 мин) + refresh-токен\nаудитория: клиент (/api/mobile)\nили сотрудник (/api/operator)
+end
+
+== Запросы к API ==
+APP -> API : запрос с Authorization: Bearer <access>
+API -> API : подпись, срок, аудитория, роль\n(CLIENT / OPERATOR / ADMIN)
+alt токен просрочен
+  API --> APP : 401
+else доступ разрешён
+  API --> APP : данные
+end
+
+== Обновление токена ==
+APP -> API : обновление по refresh-токену
+API -> DB : проверить сессию и что refresh ещё не использован
+alt refresh использован, сессия отозвана или срок вышел
+  API --> APP : 401 → повторный вход
+else refresh действителен
+  API -> DB : пометить старый refresh использованным,\nвыдать новый
+  API --> APP : новая пара токенов
+  note right
+    Срок refresh: приложение — 60 дней,
+    веб — 12 часов.
+  end note
+end
+
+== Выход и блокировка ==
+U -> APP : «Выйти»
+APP -> API : выход
+API -> DB : отозвать сессию
+note over API, DB : блокировка пользователя администратором\nотзывает сессию сразу же
+@enduml

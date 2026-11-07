@@ -1,0 +1,47 @@
+@startuml 09_seq_ml_analysis
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Фоновый ML-анализ фотографий
+
+participant "Job worker" as WRK
+database "PostgreSQL\n(background_jobs,\nimage_analyses)" as DB
+participant "FileStorage" as FS
+participant "ML Image Service\nPOST /analyze" as ML
+participant "Routing /\nClaimStatusService" as RT
+
+autonumber
+loop воркер опрашивает очередь
+  WRK -> DB : SELECT job (ANALYZE_IMAGE) WHERE готова к запуску\nFOR UPDATE SKIP LOCKED LIMIT 1
+  DB --> WRK : задача (claimId, fileId)
+  WRK -> FS : прочитать файл
+  WRK -> ML : POST /analyze\n{document_id, claim_id, storage_key, model_version}\nтаймаут 10 с
+
+  alt ответ 200 — качество приемлемо
+    ML -> ML : Quality Checker → Damage Classifier
+    ML --> WRK : {quality {score, acceptable: true},\ndamage {type, confidence, top_classes}, model_version}
+    WRK -> DB : INSERT image_analyses; задача завершена
+  else ответ 422 — качество неприемлемо
+    ML --> WRK : {quality {acceptable: false,\nissues: BLURRY / LOW_LIGHT / …}, damage: null}
+    WRK -> DB : INSERT image_analyses (quality_acceptable = false);\nзадача завершена
+  else таймаут или сервис недоступен
+    WRK -> DB : attempts + 1
+    alt попыток не больше 3
+      WRK -> DB : статус PENDING_RETRY,\nследующий запуск через 30 с → 90 с → 270 с
+    else попыток больше 3
+      WRK -> DB : статус ML_FAILED
+      note right
+        Оператор увидит «Автоматический
+        анализ недоступен» и продолжит вручную.
+      end note
+    end
+  end
+end
+
+== Все фото обращения обработаны ==
+WRK -> DB : проверка: по всем фото есть итог\n(результат, ML_FAILED или истёк срок ожидания)
+WRK -> RT : finalizeAnalysis(claimId)
+ref over RT, DB : Маршрутизация и перевод статуса — диаграмма 10
+@enduml

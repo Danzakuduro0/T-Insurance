@@ -1,0 +1,61 @@
+@startuml 03_state_claim
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam state {
+  BackgroundColor<<hidden>> #E6E6E6
+  BorderColor<<hidden>> #9E9E9E
+}
+title Конечный автомат статусов обращения (раздел 3.2)
+
+state "Черновик\nDRAFT" as DRAFT
+state "Отправлено\nSUBMITTED" as SUBMITTED
+state "Проверка материалов\nIN_ANALYSIS" as IN_ANALYSIS
+state "Требуется уточнение\nNEEDS_INFO" as NEEDS_INFO
+state "В очереди\nQUEUED" as QUEUED <<hidden>>
+state "Назначен специалист\nASSIGNED" as ASSIGNED <<hidden>>
+state "На рассмотрении\nIN_REVIEW" as IN_REVIEW
+state "Завершено\nCOMPLETED" as COMPLETED
+state "Закрыто без обработки\nCANCELLED" as CANCELLED
+
+[*] --> DRAFT : клиент создал черновик
+
+DRAFT --> SUBMITTED : CLIENT\nотправил, комплект полный
+DRAFT --> NEEDS_INFO : CLIENT отправил,\nне хватает полей / документов\n(сразу, со списком недостающего)
+SUBMITTED --> IN_ANALYSIS : SYSTEM
+
+IN_ANALYSIS --> QUEUED : SYSTEM (также ADMIN)\nанализ завершён или истёк\nсрок ожидания ML
+IN_ANALYSIS --> NEEDS_INFO : SYSTEM\nфото непригодно — переснять
+NEEDS_INFO --> IN_ANALYSIS : SYSTEM\nклиент догрузил материалы
+
+QUEUED --> ASSIGNED : SYSTEM автоназначение /\nOPERATOR захват
+ASSIGNED --> IN_REVIEW : OPERATOR\nначал рассмотрение
+IN_REVIEW --> QUEUED : OPERATOR\nосвободил без завершения
+IN_REVIEW --> NEEDS_INFO : OPERATOR\nзапрос материалов
+IN_REVIEW --> COMPLETED : OPERATOR\nитоговое решение
+COMPLETED --> IN_REVIEW : ADMIN\nповторное открытие
+
+DRAFT --> CANCELLED : CLIENT
+NEEDS_INFO --> CANCELLED : CLIENT / OPERATOR /\nSYSTEM (через 7 дней)
+QUEUED --> CANCELLED : OPERATOR
+ASSIGNED --> CANCELLED : OPERATOR
+IN_REVIEW --> CANCELLED : OPERATOR
+
+CANCELLED --> [*]
+
+note right of CANCELLED
+  Причина обязательна.
+  ADMIN может закрыть из любого статуса,
+  кроме CANCELLED и COMPLETED.
+end note
+
+note left of QUEUED
+  Серые статусы (QUEUED, ASSIGNED)
+  клиенту не показываются.
+end note
+
+note bottom of IN_REVIEW
+  Недопустимый переход: HTTP 409 ILLEGAL_TRANSITION.
+  Двойная защита: ClaimStatusService + триггер БД.
+end note
+@enduml

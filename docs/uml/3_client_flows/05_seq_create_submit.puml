@@ -1,0 +1,65 @@
+@startuml 05_seq_create_submit
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Создание и отправка обращения
+
+actor "Клиент" as CL
+participant "KMP-приложение\n(Mobile / Web)" as APP
+participant "Ktor API\n/api/mobile" as API
+participant "ClaimService" as SVC
+participant "ClaimStatusService" as ST
+database "PostgreSQL" as DB
+
+autonumber
+== Форма по типу случая ==
+CL -> APP : «Новое обращение»
+APP -> API : GET /api/mobile/event-types
+API --> APP : типы случаев, поля формы,\nобязательные документы
+
+== Черновик ==
+CL -> APP : заполняет договор, тип, дату, место,\nописание, участников
+APP -> API : POST /api/mobile/claims\n{policyId, eventType, eventAt, eventLocation, description,\ncontactPhone, participants, details, clientRequestId}
+API -> API : проверка JWT (аудитория клиента),\nвладелец договора
+API -> SVC : createDraft(...)
+SVC -> DB : INSERT claims (status = DRAFT),\nINSERT claim_status_history
+note right
+  Сведения о ТС берутся из договора.
+  Повтор с тем же clientRequestId
+  не создаёт дубль обращения.
+end note
+API --> APP : 201 {id, number: TS-0000001, status: DRAFT}
+
+CL -> APP : правит поля
+APP -> API : PATCH /api/mobile/claims/{id}\n(в DRAFT — любые поля)
+API --> APP : 200
+
+== Загрузка материалов ==
+ref over APP, DB : Загрузка и проверка файлов — диаграмма 06
+
+== Проверка комплектности ==
+APP -> API : GET /api/mobile/claims/{id}/completeness
+API -> SVC : completeness(claimId)
+SVC -> DB : поля и документы по event_types /\nevent_type_fields / required_documents
+API --> APP : {missingFields[], missingDocuments[]}
+
+== Отправка ==
+CL -> APP : «Отправить»
+APP -> API : POST /api/mobile/claims/{id}/submit
+API -> SVC : submit(claimId)
+SVC -> SVC : повторная проверка комплектности
+
+alt комплект неполный
+  SVC -> ST : DRAFT → NEEDS_INFO\n(client_comment = список недостающего)
+  ST -> DB : одна транзакция:\nUPDATE claims, INSERT claim_status_history,\nINSERT notifications
+  API --> APP : 200 {status: NEEDS_INFO, missing: […]}
+  APP --> CL : «Нужно дополнить» + список
+else комплект полный
+  SVC -> ST : DRAFT → SUBMITTED, затем SUBMITTED → IN_ANALYSIS
+  ST -> DB : одна транзакция:\nUPDATE claims.status / status_changed_at,\nINSERT claim_status_history,\nINSERT notifications («обращение принято»)
+  API --> APP : 200 {status: IN_ANALYSIS}
+  APP --> CL : «Проверяем материалы»
+end
+@enduml

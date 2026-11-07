@@ -1,0 +1,42 @@
+@startuml 10_activity_routing
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 12
+title Маршрутизация обращения после анализа (раздел 6.4)
+
+start
+:Анализ фото завершён\nили истёк срок ожидания ML;
+note right
+  threshold настраивается в конфигурации;
+  начальное значение 0.65 нужно подтвердить
+  на проверочной выборке (≥ 20 изображений CarDD).
+end note
+
+if (Обязательный документ отсутствует?) then (да)
+  #FFE0B2:Направление: ADDITIONAL_DOCS;
+  :IN_ANALYSIS → NEEDS_INFO\nклиенту — список недостающих документов;
+else (нет)
+  if (Любое фото: quality_acceptable = false?) then (да)
+    #FFE0B2:Направление: ADDITIONAL_DOCS;
+    :IN_ANALYSIS → NEEDS_INFO\nклиенту — переснять фото\n(BLURRY, LOW_LIGHT, OVEREXPOSED, …);
+  else (нет)
+    if (По фото получен ML_FAILED?) then (да)
+      #FFF59D:Направление: MANUAL_REVIEW;
+      :Метка «Автоматический анализ недоступен»;
+    elseif (damage_confidence ≥ threshold (0.65)?) then (да)
+      #C8E6C9:Направление: AUTO\n(в бэкенде — STANDARD);
+      :Результат ML — как справочная информация;
+    else (нет)
+      #FFF59D:Направление: MANUAL_REVIEW;
+      :Приоритет повышается до HIGH;
+    endif
+    :INSERT claim_decisions (решение системы);
+    :IN_ANALYSIS → QUEUED;
+    :Автоназначение оператора\nQUEUED → ASSIGNED;
+  endif
+endif
+
+:Запись в claim_status_history;
+:Уведомление клиенту\n(в той же транзакции);
+stop
+@enduml

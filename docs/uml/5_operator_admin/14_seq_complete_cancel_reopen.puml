@@ -1,0 +1,50 @@
+@startuml 14_seq_complete_cancel_reopen
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Завершение, закрытие и повторное открытие обращения
+
+actor "Оператор" as OP
+actor "Администратор" as AD
+participant "Web" as WEB
+participant "Ktor API\n/api/operator" as API
+participant "ClaimStatusService" as ST
+database "PostgreSQL" as DB
+
+autonumber
+== Завершение рассмотрения ==
+OP -> WEB : «Завершить рассмотрение»
+WEB -> API : POST /api/operator/claims/{id}/complete
+API -> ST : IN_REVIEW → COMPLETED
+ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT notifications\n(«рассмотрение завершено»)
+API --> WEB : 200
+note right : решение о выплате система не принимает —\nфиксируется только итог рассмотрения
+
+== Закрытие без обработки ==
+OP -> WEB : «Закрыть обращение» + причина
+WEB -> API : POST /api/operator/claims/{id}/cancel\n{reason}
+API -> API : проверка прав по роли и статусу
+alt причина не указана
+  API --> WEB : 422 VALIDATION_ERROR
+else OPERATOR: статус NEEDS_INFO / QUEUED / ASSIGNED / IN_REVIEW
+  API -> ST : → CANCELLED
+  ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT audit_log, INSERT notifications
+  API --> WEB : 200
+else ADMIN: любой статус, кроме CANCELLED и COMPLETED
+  API -> ST : → CANCELLED
+  ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT audit_log, INSERT notifications
+  API --> WEB : 200
+else переход недопустим
+  API --> WEB : 409 ILLEGAL_TRANSITION
+end
+
+== Повторное открытие ==
+AD -> WEB : «Открыть повторно» + причина
+WEB -> API : POST /api/operator/claims/{id}/reopen\n{reason}
+API -> API : только ADMIN
+API -> ST : COMPLETED → IN_REVIEW
+ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT audit_log (REOPENED, comment)
+API --> WEB : 200
+@enduml

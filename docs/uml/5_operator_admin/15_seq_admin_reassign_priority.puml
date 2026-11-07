@@ -1,0 +1,44 @@
+@startuml 15_seq_admin_reassign_priority
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Администратор: переназначение и изменение приоритета
+
+actor "Администратор" as AD
+participant "Web\n(админ-панель)" as WEB
+participant "Ktor API\n/api/operator" as API
+participant "DecisionService" as DS
+database "PostgreSQL" as DB
+
+autonumber
+== Метрики ==
+AD -> WEB : открывает дашборд
+WEB -> API : запрос метрик
+API -> DB : новые за сегодня, в очереди, на рассмотрении,\nпросрочено, среднее время до начала рассмотрения,\nчисло запросов уточнений
+API --> WEB : значения метрик
+
+== Переназначение ==
+AD -> WEB : выбирает оператора + комментарий
+WEB -> API : POST /api/operator/queue/{id}/reassign\n{operatorId, comment}
+API -> API : только ADMIN, комментарий обязателен
+alt комментарий пустой
+  API --> WEB : 422 VALIDATION_ERROR
+else данные корректны
+  API -> DB : UPDATE claims SET assigned_to = новый оператор
+  API -> DB : INSERT audit_log (старый → новый оператор, comment)
+  API --> WEB : 200
+end
+
+== Изменение приоритета или направления ==
+AD -> WEB : новое значение + причина
+WEB -> API : запрос на исправление приоритета / направления
+API -> DS : override(priority | direction, reason)
+note over DS, DB : одна транзакция
+DS -> DB : INSERT claim_decisions\n(action = OVERRIDE, supersedes_id, reason)
+DS -> DB : UPDATE claims.priority / direction
+DS -> DB : INSERT audit_log (PRIORITY_CHANGE / ROUTING_CHANGE, comment)
+API --> WEB : 200
+note right : причина обязательна на уровне БД
+@enduml

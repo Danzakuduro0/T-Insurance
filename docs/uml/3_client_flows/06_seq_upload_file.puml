@@ -1,0 +1,53 @@
+@startuml 06_seq_upload_file
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Загрузка и проверка файла (синхронная часть)
+
+actor "Клиент" as CL
+participant "KMP-приложение\n(Mobile / Web)" as APP
+participant "Ktor API\n/api/mobile" as API
+participant "FileValidator" as FV
+participant "FileStorage\n(диск)" as FS
+database "PostgreSQL" as DB
+
+autonumber
+CL -> APP : выбирает фото / документ
+APP -> API : POST /api/mobile/claims/{id}/files\nmultipart: documentType, file,\nclientRequestId, replacesFileId?
+API -> API : JWT, владелец обращения,\nстатус DRAFT или NEEDS_INFO
+
+alt превышен лимит (15 файлов или 100 МБ)
+  API --> APP : 409 FILES_LIMIT
+else в пределах лимита
+  API -> FV : validate(file, documentType)
+  FV -> FV : тип по содержимому (magic bytes):\nJPEG, PNG, PDF
+  FV -> FV : размер по типу документа:\nфото и извещение ≤ 20 МБ,\nудостоверение и СТС ≤ 10 МБ
+  FV -> FV : изображение декодируется полностью;\nлишние пиксели и PDF со скриптами — отказ
+  FV -> FV : удалить EXIF и геолокацию;\nпосчитать SHA-256 и перцептивный хэш
+
+  alt формат или содержимое не подходят
+    API --> APP : 422 с подсказкой («замените файл»)
+  else файл слишком большой
+    API --> APP : 413 FILE_TOO_LARGE
+  else SHA-256 уже есть в этом обращении
+    API --> APP : 200, файл со статусом DUPLICATE\n(повтор при плохой сети — не ошибка)
+  else файл допустим
+    note over API, DB : одна транзакция
+    API -> FS : сохранить файл
+    API -> DB : INSERT claim_files (status OK, sha256, phash);\nесли replacesFileId — связать с заменяемым\n(история сохраняется)
+    API -> DB : INSERT background_jobs\n(ANALYZE_IMAGE — для фотографий)
+    note over API, DB : конец транзакции
+    opt то же фото найдено в другом обращении\n(в т.ч. пересжатое)
+      API -> DB : пометка для оператора
+    end
+    API --> APP : 201 {fileId, status: OK}
+    note right
+      Загрузка не ждёт результата ML:
+      анализ выполняется в фоне.
+    end note
+  end
+end
+APP --> CL : результат загрузки
+@enduml

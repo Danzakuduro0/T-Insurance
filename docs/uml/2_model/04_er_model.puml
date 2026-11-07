@@ -1,0 +1,172 @@
+@startuml 04_er_model
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 8
+hide circle
+title ER-диаграмма — ключевые сущности
+
+entity "users" as users {
+  * id : bigint <<PK>>
+  --
+  role : CLIENT | OPERATOR | ADMIN
+  full_name
+  phone  (вход клиента)
+  email  (вход оператора)
+}
+
+entity "policies" as policies {
+  * id : bigint <<PK>>
+  --
+  # user_id : bigint <<FK>>
+  number
+  valid_from, valid_to
+  vehicle (марка, модель, госномер, год)
+}
+
+entity "event_types" as event_types {
+  * code : CAR_ACCIDENT | CAR_DAMAGE | CAR_GLASS <<PK>>
+  --
+  name
+}
+
+entity "event_type_fields" as event_type_fields {
+  * id : bigint <<PK>>
+  --
+  # event_type : text <<FK>>
+  field_key
+  is_required
+}
+
+entity "required_documents" as required_documents {
+  * id : bigint <<PK>>
+  --
+  # event_type : text <<FK>>
+  document_type
+  min_count
+}
+
+entity "claims" as claims {
+  * id : bigint <<PK>>
+  --
+  number : TS-0000001
+  # client_id : bigint <<FK>>
+  # policy_id : bigint <<FK>>
+  # event_type : text <<FK>>
+  # assigned_to : bigint <<FK>>
+  status
+  status_changed_at
+  priority : 1 | 2 | 3
+  direction : STANDARD | MANUAL_REVIEW
+  event_at, event_location
+  description, contact_phone
+  details : jsonb
+  client_request_id : uuid
+}
+
+entity "claim_files" as claim_files {
+  * id : bigint <<PK>>
+  --
+  # claim_id : bigint <<FK>>
+  # replaces_file_id : bigint <<FK>>
+  document_type
+  status : OK | DUPLICATE | REJECTED
+  sha256, perceptual_hash
+  mime_type, size_bytes
+  client_request_id : uuid
+}
+
+entity "image_analyses" as image_analyses {
+  * id : bigint <<PK>>
+  --
+  # file_id : bigint <<FK>>
+  quality_score
+  quality_acceptable
+  quality_issues : jsonb
+  damage_type
+  damage_confidence
+  model_version
+}
+
+entity "claim_decisions" as claim_decisions {
+  * id : bigint <<PK>>
+  --
+  # claim_id : bigint <<FK>>
+  # supersedes_id : bigint <<FK>>
+  action : решение системы | OVERRIDE
+  reason : обязательна при OVERRIDE
+  actor_type, actor_id
+  created_at
+}
+
+entity "claim_status_history" as claim_status_history {
+  * id : bigint <<PK>>
+  --
+  # claim_id : bigint <<FK>>
+  from_status, to_status
+  actor_type, actor_id
+  reason : внутренняя
+  client_comment : для клиента
+  visible_to_client
+  created_at
+}
+
+entity "audit_log" as audit_log {
+  * id : bigint <<PK>>
+  --
+  entity_type, entity_id
+  action
+  old_value, new_value
+  actor_type, actor_id
+  comment
+  created_at
+}
+
+entity "notifications" as notifications {
+  * id : bigint <<PK>>
+  --
+  # user_id : bigint <<FK>>
+  # claim_id : bigint <<FK>>
+  event_type
+  title, body
+  is_read
+  created_at
+}
+
+entity "background_jobs" as background_jobs {
+  * id : bigint <<PK>>
+  --
+  type : ANALYZE_IMAGE | …
+  payload : jsonb
+  status
+  attempts
+  run_at
+}
+
+users ||--o{ policies : "владеет"
+users ||--o{ claims : "подаёт (client)"
+users |o--o{ claims : "ведёт (assigned_to)"
+policies ||--o{ claims : "по договору"
+event_types ||--o{ claims : "тип случая"
+event_types ||--o{ event_type_fields : "поля формы"
+event_types ||--o{ required_documents : "обязательные\nдокументы"
+
+claims ||--o{ claim_files : "материалы"
+claim_files |o--o| claim_files : "заменён (replaces)"
+claim_files ||--o{ image_analyses : "результат ML"
+claims ||--o{ claim_decisions : "решения"
+claim_decisions |o--o| claim_decisions : "исправлено (supersedes)"
+claims ||--o{ claim_status_history : "история статусов"
+claims ||--o{ notifications : "уведомления"
+users ||--o{ notifications : "получает"
+claim_files ..> background_jobs : "ANALYZE_IMAGE\n(в одной транзакции)"
+
+note bottom of audit_log
+  audit_log — изменения полей и файлов, ссылается на
+  claims / claim_files через entity_type + entity_id.
+end note
+
+note bottom of background_jobs
+  Служебные поля очереди (status, attempts, run_at)
+  уточнить по миграциям Flyway.
+end note
+@enduml

@@ -1,0 +1,65 @@
+@startuml 02_architecture
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam componentStyle rectangle
+title Архитектурный контекст — Т-Страхование
+
+actor "Клиент" as C
+actor "Оператор / Администратор" as O
+
+node "Клиентские приложения\nKotlin Multiplatform (общая кодовая база)" as CLIENTS {
+  component "Mobile\n(Android / iOS)" as MOB
+  component "Web\n(кабинет клиента,\nрабочее место оператора)" as WEB
+}
+
+node "Docker Compose" as DOCKER {
+
+  package "Main Service — Kotlin 2.4 + Ktor 3 (JDK 21)" as MAIN {
+    component "Routes\n/api/mobile · /api/operator" as RT
+    component "Auth\n(JWT, refresh)" as AU
+    component "Services / Domain\nClaimStatusService, маршрутизация,\nпроверка комплектности" as SV
+    component "Repository\n(Exposed, Flyway, HikariCP)" as RP
+    component "Notification module\n(in-app + имитация SMS/email/push)" as NT
+    component "Job worker\n(background_jobs)" as WK
+    interface "FileStorage" as FSI
+  }
+
+  package "ML Image Service — Python, FastAPI" as MLS {
+    component "POST /analyze" as API_ML
+    component "Quality Checker\n(blur, яркость, разрешение)" as QC
+    component "Damage Classifier\n(ResNet-18 / EfficientNet-B0, CarDD)" as DC
+  }
+
+  database "PostgreSQL 16\nclaims, claim_files, users,\naudit_log, background_jobs, …" as DB
+  storage "Диск сервера\n(S3 — позже)" as DISK
+}
+
+C --> MOB
+C --> WEB
+O --> WEB
+
+MOB --> RT : HTTPS / REST JSON\n/api/mobile
+WEB --> RT : HTTPS / REST JSON\n/api/mobile · /api/operator
+
+RT --> AU
+RT --> SV
+SV --> RP
+SV --> NT
+SV --> FSI
+FSI --> DISK
+RP --> DB
+NT --> DB
+
+WK --> DB : SELECT … FOR UPDATE\nSKIP LOCKED
+WK --> API_ML : HTTP, таймаут 10 с
+API_ML --> QC
+API_ML --> DC
+WK --> SV : результат анализа,\nмаршрутизация
+
+note bottom of DB
+  Очередь задач — таблица background_jobs
+  (ANALYZE_IMAGE, уведомления, повторы с паузой).
+  Брокер сообщений не используется.
+end note
+@enduml

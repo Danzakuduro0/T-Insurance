@@ -1,0 +1,59 @@
+@startuml 07_seq_needs_info_cycle
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Запрос уточнения оператором и ответ клиента
+
+actor "Оператор" as OP
+participant "Web\n(рабочее место)" as WEB
+participant "Ktor API" as API
+participant "ClaimStatusService" as ST
+database "PostgreSQL" as DB
+participant "KMP-приложение\n(клиент)" as APP
+actor "Клиент" as CL
+
+autonumber
+== Оператор запрашивает материалы ==
+OP -> WEB : «Запросить уточнения»\n(текст для клиента + внутренняя причина)
+WEB -> API : POST /api/operator/claims/{id}/request-info\n{clientComment, reason}
+API -> ST : IN_REVIEW → NEEDS_INFO
+ST -> DB : одна транзакция:\nUPDATE claims.status,\nINSERT claim_status_history\n(reason, client_comment, visible_to_client = true),\nINSERT notifications
+note right
+  Клиент видит только client_comment.
+  Внутренняя причина остаётся для сотрудников.
+end note
+API --> WEB : 200
+WEB --> OP : статус «Требуется уточнение»
+
+== Клиент получает запрос ==
+loop каждые 5 секунд
+  APP -> API : GET /api/mobile/notifications
+end
+API --> APP : «По обращению №… требуются дополнительные\nматериалы: {client_comment}»
+CL -> APP : открывает обращение
+APP -> API : GET /api/mobile/claims/{id}/timeline
+API --> APP : шкала: «Запрошены уточнения» + комментарий
+
+== Клиент дополняет обращение ==
+CL -> APP : правит запрошенные поля,\nзаменяет файлы
+APP -> API : PATCH /api/mobile/claims/{id}\n(в NEEDS_INFO — только запрошенные поля)
+APP -> API : POST /api/mobile/claims/{id}/files\n(replacesFileId)
+note right : подробности загрузки — диаграмма 06
+CL -> APP : «Отправить повторно»
+APP -> API : POST /api/mobile/claims/{id}/submit
+API -> API : проверка комплектности
+
+alt комплект полный
+  API -> ST : NEEDS_INFO → IN_ANALYSIS
+  ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT notifications\n(«материалы получены»)
+  API --> APP : 200 {status: IN_ANALYSIS}
+  note over API, DB : дальше — анализ и маршрутизация (диаграммы 09, 10)
+else всё ещё не хватает
+  API --> APP : 200 {status: NEEDS_INFO, missing: […]}
+end
+
+== Клиент не ответил ==
+note over API, DB : через 7 дней SYSTEM переводит\nNEEDS_INFO → CANCELLED (диаграмма 11)
+@enduml

@@ -1,0 +1,49 @@
+@startuml 08_seq_timeline_notifications
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Временная шкала и уведомления клиента
+
+actor "Клиент" as CL
+participant "KMP-приложение\n(Mobile / Web)" as APP
+participant "Ktor API\n/api/mobile" as API
+participant "NotificationModule" as NT
+database "PostgreSQL" as DB
+
+autonumber
+== Список и шкала обращения ==
+CL -> APP : открывает «Мои обращения»
+APP -> API : GET /api/mobile/claims
+API -> DB : SELECT claims WHERE client_id = текущий пользователь
+API --> APP : список обращений со статусами
+
+CL -> APP : открывает обращение
+APP -> API : GET /api/mobile/claims/{id}/timeline
+API -> API : проверка владельца
+API -> DB : SELECT claim_status_history\nWHERE claim_id = {id} AND visible_to_client
+API --> APP : события с client_comment
+note right
+  QUEUED и ASSIGNED клиенту не показываются.
+  IN_ANALYSIS отображается как «Проверяем материалы».
+end note
+APP --> CL : временная шкала, текущий этап выделен
+
+== Уведомления ==
+note over NT, DB : при каждой смене статуса уведомление\nсоздаётся в той же транзакции
+NT -> DB : INSERT notifications\n(event_type, title, body)
+NT -> NT : имитация SMS / email / push\n(запись в журнал, без внешних провайдеров)
+
+loop пока приложение открыто, каждые 5 секунд
+  APP -> API : GET /api/mobile/notifications
+  API -> DB : SELECT notifications WHERE user_id = текущий
+  API --> APP : список + число непрочитанных
+end
+APP --> CL : бейдж на колокольчике
+
+CL -> APP : открывает уведомление
+APP -> API : PATCH /api/mobile/notifications/{id}/read
+API -> DB : UPDATE notifications SET is_read = true
+API --> APP : 200
+@enduml

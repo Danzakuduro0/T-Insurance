@@ -1,0 +1,60 @@
+@startuml 12_seq_queue_acquire
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Очередь оператора: захват, карточка, начало рассмотрения
+
+actor "Оператор" as OP
+participant "Web\n(рабочее место)" as WEB
+participant "Ktor API\n/api/operator" as API
+participant "ClaimStatusService" as ST
+database "PostgreSQL" as DB
+
+autonumber
+== Очередь ==
+OP -> WEB : открывает очередь
+WEB -> API : GET /api/operator/queue\n?status, minPriority, direction, manualReview,\noverdue, search, tz, limit, offset
+API -> DB : SELECT claims с фильтрами и пагинацией
+API --> WEB : {items[] с dueAt и isOverdue, total}
+WEB --> OP : таблица (на узком экране — карточки),\nпросроченные подсвечены
+
+== Назначение ==
+alt автоназначение
+  note over API, DB : при переходе в QUEUED система выбирает оператора\nи переводит QUEUED → ASSIGNED
+else ручной захват
+  OP -> WEB : «Захватить»
+  WEB -> API : POST /api/operator/queue/{id}/acquire
+  API -> DB : UPDATE claims SET assigned_to = оператор\nWHERE id = {id} AND assigned_to IS NULL\nAND status = QUEUED  (FOR UPDATE SKIP LOCKED)
+  alt 0 строк изменено
+    API --> WEB : 409 ALREADY_ASSIGNED
+    WEB --> OP : «Обращение уже взято другим оператором»
+  else строка изменена
+    API -> ST : QUEUED → ASSIGNED (OPERATOR)
+    ST -> DB : INSERT claim_status_history
+    API --> WEB : 200
+  end
+end
+
+== Карточка и начало рассмотрения ==
+OP -> WEB : открывает карточку
+WEB -> API : GET /api/operator/claims/{id}
+API -> DB : обращение, договор, участники, файлы,\nimage_analyses, claim_decisions, история
+API --> WEB : данные карточки
+WEB -> API : GET /api/operator/claims/{id}/files/{fileId}/content
+API -> API : проверка прав
+API --> WEB : содержимое файла\n(Cache-Control: no-store, nosniff)
+OP -> WEB : «Начать рассмотрение»
+WEB -> API : POST /api/operator/claims/{id}/start-review
+API -> ST : ASSIGNED → IN_REVIEW
+ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT notifications («принято в рассмотрение»)
+API --> WEB : 200
+
+== Освобождение ==
+OP -> WEB : «Освободить»
+WEB -> API : POST /api/operator/queue/{id}/release
+API -> ST : IN_REVIEW → QUEUED
+ST -> DB : assigned_to = NULL, INSERT claim_status_history
+API --> WEB : 200
+@enduml

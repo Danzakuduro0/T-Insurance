@@ -1,0 +1,36 @@
+@startuml 11_seq_timeouts_sla
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Контроль сроков в статусах
+
+participant "Планировщик /\nJob worker" as SCH
+participant "ClaimStatusService" as ST
+database "PostgreSQL" as DB
+participant "Ktor API\n/api/operator" as API
+actor "Оператор" as OP
+
+autonumber
+== Ожидание ML истекло ==
+SCH -> DB : SELECT claims WHERE status = IN_ANALYSIS\nAND срок ожидания ML истёк
+loop по каждому обращению
+  SCH -> ST : IN_ANALYSIS → QUEUED (SYSTEM)
+  ST -> DB : UPDATE claims, INSERT claim_status_history
+  note right : дальше — маршрутизация (диаграмма 10),\nнаправление MANUAL_REVIEW
+end
+
+== Клиент не ответил на запрос ==
+SCH -> DB : SELECT claims WHERE status = NEEDS_INFO\nAND status_changed_at старше 7 дней
+loop по каждому обращению
+  SCH -> ST : NEEDS_INFO → CANCELLED (SYSTEM, причина: истёк срок)
+  ST -> DB : UPDATE claims, INSERT claim_status_history,\nINSERT notifications
+end
+
+== Просрочка у оператора ==
+OP -> API : GET /api/operator/queue?overdue=true
+API -> DB : status_changed_at + срок статуса (sla_hours)\nсравнить с текущим временем
+API --> OP : обращения с dueAt и isOverdue = true
+note right : просроченные подсвечиваются в очереди
+@enduml

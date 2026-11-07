@@ -1,0 +1,42 @@
+@startuml 13_seq_ml_override
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequenceMessageAlign left
+skinparam wrapWidth 260
+title Ручное исправление результата ML
+
+actor "Оператор" as OP
+participant "Web\n(карточка обращения)" as WEB
+participant "Ktor API\n/api/operator" as API
+participant "DecisionService" as DS
+database "PostgreSQL" as DB
+
+autonumber
+OP -> WEB : видит результат модели\n(тип, уверенность, качество)
+note right
+  Низкая уверенность (< threshold)
+  помечена предупреждением.
+end note
+OP -> WEB : «Исправить результат»
+WEB -> WEB : форма: тип повреждения, качество фото,\nпричина (обязательна, ≥ 10 символов)
+OP -> WEB : «Подтвердить»
+WEB -> API : POST /api/operator/claims/{id}/decisions/{decisionId}/override\n{damage_type, quality_acceptable, comment}
+API -> API : проверка роли (OPERATOR / ADMIN)
+
+alt причина не указана
+  API --> WEB : 422 VALIDATION_ERROR
+  WEB --> OP : подсветка поля «Причина»
+else данные корректны
+  API -> DS : override(decisionId, значения, comment)
+  note over DS, DB : одна транзакция
+  DS -> DB : INSERT claim_decisions\n(action = OVERRIDE, supersedes_id = исходное решение,\nreason, actor)
+  DS -> DB : INSERT audit_log\n(ML_OVERRIDE, old_value → new_value, comment)
+  note over DS, DB
+    Таблица image_analyses не меняется:
+    исходный результат модели сохраняется.
+  end note
+  API --> WEB : 200 {original_result, override_result}
+  WEB --> OP : оба значения рядом,\nзапись выделена в истории действий
+end
+@enduml

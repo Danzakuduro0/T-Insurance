@@ -1,0 +1,89 @@
+@startuml 01_use_case
+!theme materia-outline
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam packageStyle rectangle
+left to right direction
+title Use Case — Т-Страхование: сопровождение страхового случая
+
+actor "Клиент" as CL
+actor "Оператор" as OP
+actor "Администратор" as AD
+actor "Система\n(воркер / планировщик)" as SY
+
+rectangle "Кабинет клиента (Mobile / Web)" {
+  usecase "Подать обращение\n(черновик → отправка)" as UC1
+  usecase "Проверить комплектность" as UC2
+  usecase "Загрузить материалы" as UC3
+  usecase "Ответить на запрос\nуточнения" as UC4
+  usecase "Смотреть временную шкалу\nстатусов" as UC5
+  usecase "Читать уведомления" as UC6
+  usecase "Отозвать обращение" as UC7
+}
+
+rectangle "Рабочее место оператора (Web)" {
+  usecase "Просмотреть очередь\n(фильтры, просрочка)" as UC10
+  usecase "Захватить обращение /\nначать рассмотрение" as UC11
+  usecase "Открыть карточку\n(файлы, ML, история)" as UC12
+  usecase "Исправить результат ML" as UC13
+  usecase "Запросить уточнение" as UC14
+  usecase "Завершить рассмотрение" as UC15
+  usecase "Освободить обращение" as UC16
+}
+
+rectangle "Администрирование" {
+  usecase "Переназначить оператора" as UC20
+  usecase "Изменить приоритет /\nнаправление" as UC21
+  usecase "Закрыть / повторно\nоткрыть обращение" as UC22
+  usecase "Просмотреть метрики" as UC23
+}
+
+rectangle "Автоматическая обработка" {
+  usecase "Проверить файл\n(формат, размер, дубли, EXIF)" as UC30
+  usecase "ML-анализ фото\n(качество + тип повреждения)" as UC31
+  usecase "Маршрутизация\nи приоритет" as UC32
+  usecase "Автоназначение оператора" as UC33
+  usecase "Контроль сроков\nв статусах" as UC34
+  usecase "Сформировать уведомления" as UC35
+}
+
+CL --> UC1
+CL --> UC3
+CL --> UC4
+CL --> UC5
+CL --> UC6
+CL --> UC7
+
+OP --> UC10
+OP --> UC11
+OP --> UC12
+OP --> UC14
+OP --> UC15
+OP --> UC16
+
+AD --|> OP
+AD --> UC20
+AD --> UC21
+AD --> UC22
+AD --> UC23
+
+SY --> UC30
+SY --> UC31
+SY --> UC32
+SY --> UC33
+SY --> UC34
+SY --> UC35
+
+UC1 ..> UC2 : <<include>>
+UC1 ..> UC3 : <<include>>
+UC3 ..> UC30 : <<include>>
+UC4 ..> UC3 : <<include>>
+UC31 ..> UC32 : <<include>>
+UC13 .> UC12 : <<extend>>
+UC14 .> UC12 : <<extend>>
+
+note bottom of UC15
+  Система не принимает решение о выплате:
+  оператор фиксирует только итог рассмотрения.
+end note
+@enduml
