@@ -34,6 +34,7 @@ import kotlinx.serialization.json.Json
 import ru.tinsurance.api.*
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.CompletenessDto
 import ru.tinsurance.api.mobile.CreateClaimRequest
 import ru.tinsurance.api.mobile.EventTypeDto
 import ru.tinsurance.api.mobile.NotificationDto
@@ -189,7 +190,16 @@ class MobileApiClient(
             .body()
     }
 
-    /** Отправка или повторная отправка после дозагрузки; 409 — пункты запроса не выполнены. */
+    /** Чего не хватает для отправки — тот же расчёт, что сервер делает при submit. */
+    suspend fun completeness(id: Long): CompletenessDto = call {
+        http.get(claimPath(MobileApi.CLAIM_COMPLETENESS, id)).body()
+    }
+
+    /**
+     * Отправка или повторная отправка после дозагрузки. Без части документов сервер принимает обращение
+     * и сразу запрашивает недостающее (NEEDS_INFO); 400 — не заполнены основные поля, 409 — пункты
+     * запроса не выполнены.
+     */
     suspend fun submit(id: Long): ClaimDetails = call {
         http.post(claimPath(MobileApi.CLAIM_SUBMIT, id)).body()
     }

@@ -101,6 +101,8 @@ private fun ClientApp(
             when (screen) {
                 ClientScreen.Claims -> { client.loadClaims(); client.refreshUnreadCount() }
                 ClientScreen.Notifications -> client.loadNotifications()
+                // Шаг 4 формы: при каждом открытии — свежая проверка полноты.
+                ClientScreen.Review -> if (client.claim.details?.status == ClaimStatus.DRAFT) client.loadReview()
                 else -> Unit
             }
         }
@@ -115,6 +117,8 @@ private fun ClientApp(
         var uploadTarget by remember { mutableStateOf<UploadTarget?>(null) }
         // Ответы на запрошенные поля: fieldName → текст.
         var replyFields by remember { mutableStateOf(emptyMap<String, String>()) }
+        // Флажок «Сведения верны» на шаге 4 настоящего черновика.
+        var reviewConfirmed by remember { mutableStateOf(false) }
         var loadingFiles by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
@@ -203,7 +207,7 @@ private fun ClientApp(
             if (files.isNullOrEmpty()) return
             val target = uploadTarget
             val onServerScreen =
-                screenName == ClientScreen.Reply.name || screenName == ClientScreen.Materials.name
+                screenName in listOf(ClientScreen.Reply, ClientScreen.Materials, ClientScreen.PhotoQuality).map { it.name }
             if (!inspection && !demo && client.claim.id != null && onServerScreen && target != null) {
                 uploadToServer(files, target)
                 return
@@ -320,7 +324,12 @@ private fun ClientApp(
                     ClientScreen.PhotoQuality -> BackHeader("Проверка качества фото", ::back)
                     ClientScreen.Sent -> BackHeader("Отправка обращения", ::home)
                     ClientScreen.Reply -> BackHeader("Дополните обращение", ::back)
-                    else -> BackHeader("Обращение № $claimNumber", ::back)
+                    // У настоящего обращения номер с сервера: новое обращение в списке ещё не открывали.
+                    else ->
+                        BackHeader(
+                            "Обращение № ${client.claim.details?.claimNumber?.takeIf { realClaim } ?: claimNumber}",
+                            ::back,
+                        )
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     key(screen) {
@@ -388,15 +397,48 @@ private fun ClientApp(
                                         onDocument = { saveDocument(false) },
                                     )
                             }
-                            ClientScreen.PhotoQuality -> PhotoQualityScreen()
-                            ClientScreen.Review ->
-                                ReviewScreen(
-                                    draft,
-                                    if (photoReplaced) 1 + attachments.count { it.isPhoto } else 4,
-                                    1 + attachments.count { !it.isPhoto },
-                                    ::edit,
-                                )
-                            ClientScreen.Sent -> SentScreen(claimNumber)
+                            ClientScreen.PhotoQuality -> {
+                                val details = client.claim.details
+                                if (realForm && details != null)
+                                    DraftPhotoQualityScreen(
+                                        details,
+                                        client.draft.selectedType?.documents.orEmpty(),
+                                        client.reply,
+                                        onPickFiles = { doc ->
+                                            uploadTarget = UploadTarget(doc.documentType, doc.name)
+                                            pickFiles()
+                                        },
+                                        onTakePhoto = { doc ->
+                                            uploadTarget = UploadTarget(doc.documentType, doc.name)
+                                            takePhoto()
+                                        },
+                                        onDelete = { file -> client.deleteDraftFile(file.id) },
+                                    )
+                                else PhotoQualityScreen()
+                            }
+                            ClientScreen.Review -> {
+                                val details = client.claim.details
+                                if (realForm && details != null)
+                                    DraftReviewScreen(
+                                        details,
+                                        client.draft.selectedType,
+                                        claimPolicy,
+                                        client.review,
+                                        confirmed = reviewConfirmed,
+                                        onConfirm = { reviewConfirmed = it },
+                                        onEdit = ::edit,
+                                    )
+                                else
+                                    ReviewScreen(
+                                        draft,
+                                        if (photoReplaced) 1 + attachments.count { it.isPhoto } else 4,
+                                        1 + attachments.count { !it.isPhoto },
+                                        ::edit,
+                                    )
+                            }
+                            ClientScreen.Sent ->
+                                if (realClaim) DraftSentScreen(client.claim, client::reloadClaim)
+                                else SentScreen(claimNumber)
                             ClientScreen.Progress ->
                                 if (realClaim)
                                     ClaimProgressScreen(
@@ -503,12 +545,17 @@ private fun ClientApp(
                                     if (errors.isEmpty()) continueForm(ClientScreen.Materials)
                                 },
                             )
-                    // Проверка перед отправкой (06) для настоящего черновика — следующий шаг, пока по макету.
                     ClientScreen.Materials ->
                         if (realForm)
                             ActionFooter(
                                 if (client.reply.uploading) "Загружаем файлы…" else "Проверить материалы",
-                                { continueForm(ClientScreen.Review) },
+                                {
+                                    // Есть отклонённые или ещё проверяемые фото — сначала экран 05.
+                                    val docs = client.draft.selectedType?.documents.orEmpty()
+                                    val toReview = client.claim.details?.photosToReview(docs).orEmpty()
+                                    if (toReview.isNotEmpty()) open(ClientScreen.PhotoQuality)
+                                    else continueForm(ClientScreen.Review)
+                                },
                                 enabled = !client.reply.uploading,
                             )
                         else
@@ -521,33 +568,63 @@ private fun ClientApp(
                                 enabled = !loadingFiles,
                             )
                     ClientScreen.PhotoQuality ->
-                        ActionFooter(
-                            "Сделать новое фото",
-                            takePhoto,
-                            enabled = !loadingFiles,
-                            link = "Выбрать из файлов",
-                            onLink = pickFiles,
-                        )
+                        if (realForm)
+                            ActionFooter(
+                                if (client.reply.uploading) "Загружаем файлы…" else "Продолжить",
+                                { continueForm(ClientScreen.Review) },
+                                enabled = !client.reply.uploading,
+                            )
+                        else
+                            ActionFooter(
+                                "Сделать новое фото",
+                                takePhoto,
+                                enabled = !loadingFiles,
+                                link = "Выбрать из файлов",
+                                onLink = pickFiles,
+                            )
                     ClientScreen.Review ->
-                        ActionFooter(
-                            "Отправить обращение",
-                            {
-                                claimNumber = "ТС-10429"
-                                open(ClientScreen.Sent)
-                            },
-                            enabled = draft.confirmed,
-                        )
+                        if (realForm) {
+                            val review = client.review
+                            ActionFooter(
+                                if (review.sending) "Отправляем…" else "Отправить обращение",
+                                {
+                                    client.submitDraft {
+                                        reviewConfirmed = false
+                                        home()
+                                        open(ClientScreen.Sent)
+                                    }
+                                },
+                                enabled = reviewConfirmed && !review.blocked && !review.loading && !review.sending,
+                            )
+                        } else
+                            ActionFooter(
+                                "Отправить обращение",
+                                {
+                                    claimNumber = "ТС-10429"
+                                    open(ClientScreen.Sent)
+                                },
+                                enabled = draft.confirmed,
+                            )
                     ClientScreen.Sent ->
-                        ActionFooter(
-                            "Следить за обращением",
-                            {
-                                // Отправка пока локальная: показываем демо-ход обработки.
-                                client.openClaim(null)
-                                open(ClientScreen.Progress)
-                            },
-                            link = "К списку обращений",
-                            onLink = ::home,
-                        )
+                        if (realClaim) {
+                            val needsInfo = client.claim.details?.status == ClaimStatus.NEEDS_INFO
+                            ActionFooter(
+                                if (needsInfo) "Добавить материалы" else "Следить за обращением",
+                                { open(if (needsInfo) ClientScreen.Request else ClientScreen.Progress) },
+                                link = "К списку обращений",
+                                onLink = ::home,
+                            )
+                        } else
+                            ActionFooter(
+                                "Следить за обращением",
+                                {
+                                    // Отправка пока локальная: показываем демо-ход обработки.
+                                    client.openClaim(null)
+                                    open(ClientScreen.Progress)
+                                },
+                                link = "К списку обращений",
+                                onLink = ::home,
+                            )
                     ClientScreen.Request ->
                         ActionFooter(
                             "Добавить материалы",
