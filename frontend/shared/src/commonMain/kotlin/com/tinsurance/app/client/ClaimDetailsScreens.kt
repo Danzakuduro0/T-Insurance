@@ -6,6 +6,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import com.tinsurance.app.ui.*
+import kotlinx.datetime.TimeZone
 import ru.tinsurance.api.ClaimStatus
 import ru.tinsurance.api.FileStatus
 import ru.tinsurance.api.PolicyDto
@@ -109,11 +110,15 @@ internal fun LoadingOrError(state: ClaimState, onRetry: () -> Unit) {
     } else Caption("Загружаем обращение…")
 }
 
-/** Файлы, которые клиент видит в обращении: без удалённых и заменённых. */
+/** Материалы обращения для клиента: принятые и ещё проверяемые, без отклонённых, дублей и заменённых. */
 val ClaimDetails.visibleFiles
-    get() = files.filter { it.status != FileStatus.DELETED && it.status != FileStatus.REPLACED }
+    get() = files.filter { it.status == FileStatus.ACCEPTED || it.status == FileStatus.UPLOADED }
 
-fun timelineItems(claim: ClaimDetails, allEvents: List<TimelineEvent>): List<TimelineItem> = buildList {
+fun timelineItems(
+    claim: ClaimDetails,
+    allEvents: List<TimelineEvent>,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+): List<TimelineItem> = buildList {
     // Создание черновика клиенту не интересно: история начинается с отправки.
     val events = allEvents.filter { it.status != ClaimStatus.DRAFT }
     events.forEachIndexed { index, event ->
@@ -123,7 +128,7 @@ fun timelineItems(claim: ClaimDetails, allEvents: List<TimelineEvent>): List<Tim
                 index == events.lastIndex && !claim.isFinal -> "current"
                 else -> "done"
             }
-        add(TimelineItem(event.title, formatDateTime(event.at), status))
+        add(TimelineItem(event.title, formatDateTime(event.at, zone), status))
     }
     if (!claim.isFinal) add(TimelineItem("Обработка завершена", status = "waiting"))
 }

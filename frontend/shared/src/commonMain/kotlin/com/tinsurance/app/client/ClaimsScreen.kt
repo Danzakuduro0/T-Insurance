@@ -5,6 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tinsurance.app.ui.*
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import ru.tinsurance.api.ClaimStatus
@@ -133,20 +138,34 @@ private val monthsGenitive =
         "июля", "августа", "сентября", "октября", "ноября", "декабря",
     )
 
-/** "2026-10-17T18:35:00+07:00" или "2026-12-31" → "17 октября" / "31 декабря 2026". */
-fun formatDate(iso: String, withYear: Boolean = false): String {
+/**
+ * Момент времени с сервера в поясе устройства. Сервер присылает ISO в своём поясе (часто UTC:
+ * «…T07:20Z»), а клиенту нужно его местное время. Только дата («2026-12-31») — null.
+ */
+@OptIn(ExperimentalTime::class)
+fun localDateTimeOf(iso: String, zone: TimeZone = TimeZone.currentSystemDefault()): LocalDateTime? =
+    if (iso.length <= 10) null
+    else runCatching { Instant.parse(iso).toLocalDateTime(zone) }.getOrNull()
+
+/** "2026-10-17T11:35:00Z" или "2026-12-31" → "17 октября" / "31 декабря 2026" (в поясе устройства). */
+fun formatDate(
+    iso: String,
+    withYear: Boolean = false,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val local = localDateTimeOf(iso, zone)
     val parts = iso.take(10).split('-')
-    val year = parts.getOrNull(0)
-    val month = parts.getOrNull(1)?.toIntOrNull()
-    val day = parts.getOrNull(2)?.toIntOrNull()
-    if (year == null || month !in 1..12 || day == null) return iso
-    val text = "$day ${monthsGenitive[month!! - 1]}"
+    val year = local?.year ?: parts.getOrNull(0)?.toIntOrNull()
+    val month = local?.let { it.month.ordinal + 1 } ?: parts.getOrNull(1)?.toIntOrNull()
+    val day = local?.day ?: parts.getOrNull(2)?.toIntOrNull()
+    if (year == null || month == null || month !in 1..12 || day == null) return iso
+    val text = "$day ${monthsGenitive[month - 1]}"
     return if (withYear) "$text $year" else text
 }
 
-/** "2026-10-17T18:35:00+07:00" → "17 октября, 18:35" (время в поясе, который прислал сервер). */
-fun formatDateTime(iso: String): String {
-    val time = iso.drop(11).take(5)
-    val date = formatDate(iso)
-    return if (Regex("[0-9]{2}:[0-9]{2}").matches(time) && date != iso) "$date, $time" else date
+/** "2026-10-17T11:35:00Z" → "17 октября, 18:35" для устройства в UTC+7. */
+fun formatDateTime(iso: String, zone: TimeZone = TimeZone.currentSystemDefault()): String {
+    val local = localDateTimeOf(iso, zone) ?: return formatDate(iso, zone = zone)
+    val time = "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}"
+    return "${formatDate(iso, zone = zone)}, $time"
 }

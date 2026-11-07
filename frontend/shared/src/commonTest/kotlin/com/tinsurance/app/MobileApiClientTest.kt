@@ -12,6 +12,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlin.test.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.TimeZone
 
 class MobileApiClientTest {
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
@@ -83,8 +84,22 @@ class MobileApiClientTest {
 
     @Test
     fun isoDatesAreShownInRussian() {
-        assertEquals("17 октября", formatDate("2026-10-17T18:35:00+07:00"))
+        assertEquals("17 октября", formatDate("2026-10-17T18:35:00+07:00", zone = TimeZone.of("Asia/Novosibirsk")))
         assertEquals("31 декабря 2026", formatDate("2026-12-31", withYear = true))
         assertEquals("скоро", formatDate("скоро"))
+    }
+}
+
+class NetworkFailureTest {
+    @Test
+    fun browserFetchErrorBecomesFriendlyMessage() = runTest {
+        // Так ведёт себя движок Ktor в браузере: kotlin.Error, а не Exception.
+        val api =
+            MobileApiClient("http://test") { config ->
+                HttpClient(MockEngine { throw Error("Fail to fetch") }, config)
+            }
+        val error = assertFailsWith<ApiException> { api.claims() }
+        assertEquals(0, error.status)
+        assertTrue(error.message!!.startsWith("Нет связи с сервером"))
     }
 }

@@ -93,6 +93,8 @@ private fun ClientApp(
         val notifications = if (inspection || demo) demoNotifications else client.notifications
         // Открыто настоящее обращение из списка; иначе экраны показывают сценарий макета.
         val realClaim = !inspection && !demo && client.claim.id != null
+        // Вошли под настоящим пользователем: форма нового обращения работает с API.
+        val realForm = !inspection && !demo && client.user != null
         val claimPolicy = claims.policies.find { it.id == client.claim.details?.policyId }
         LaunchedEffect(screen, client.user) {
             if (inspection || demo || client.user == null) return@LaunchedEffect
@@ -109,6 +111,10 @@ private fun ClientApp(
         var message by remember { mutableStateOf<String?>(null) }
         var dialog by remember { mutableStateOf<String?>(null) }
         var editingReview by remember { mutableStateOf(false) }
+        // Куда загрузить файлы, выбранные в системном окне или снятые камерой.
+        var uploadTarget by remember { mutableStateOf<UploadTarget?>(null) }
+        // Ответы на запрошенные поля: fieldName → текст.
+        var replyFields by remember { mutableStateOf(emptyMap<String, String>()) }
         var loadingFiles by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
@@ -137,15 +143,23 @@ private fun ClientApp(
             open(next)
         }
 
+        // Экраны обращения — из API; черновик открывается в форме для продолжения.
+        // В демо-режиме обращения из примера, поэтому экраны показывают сценарий макета.
         fun openListedClaim(claim: ClaimListItem) {
             claimNumber = claim.claimNumber
-            client.openClaim(claim.id.takeIf { !demo && claim.status != ClaimStatus.DRAFT })
-            open(when {
-                claim.status == ClaimStatus.DRAFT -> ClientScreen.Contract
-                claim.actionRequired -> ClientScreen.Request
-                claim.isFinal -> ClientScreen.Completed
-                else -> ClientScreen.Progress
-            })
+            when {
+                demo -> client.openClaim(null)
+                claim.status == ClaimStatus.DRAFT -> client.openDraft(claim.id)
+                else -> client.openClaim(claim.id)
+            }
+            open(
+                when {
+                    claim.status == ClaimStatus.DRAFT -> ClientScreen.Contract
+                    claim.actionRequired -> ClientScreen.Request
+                    claim.isFinal -> ClientScreen.Completed
+                    else -> ClientScreen.Progress
+                }
+            )
         }
 
         fun readDemoNotification(id: Long? = null) {
@@ -162,9 +176,38 @@ private fun ClientApp(
             } else open(next)
         }
 
+        // Черновик и ответ на запрос: файлы сразу уходят на сервер с выбранным типом документа.
+        fun uploadToServer(files: List<PlatformFile>, target: UploadTarget) {
+            scope.launch {
+                try {
+                    val read =
+                        files.mapNotNull { file ->
+                            val error = fileError(file.name, file.size(), 0, 0)
+                            if (error != null) {
+                                message = "${file.name}: $error"
+                                null
+                            } else file.name to file.readBytes()
+                        }
+                    client.uploadFiles(read, target.documentType, target.name, target.replacesFileId)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    message = "Не удалось прочитать файл. Попробуйте выбрать его ещё раз."
+                }
+            }
+        }
+
         // Keep the picker at the root: on iOS it must outlive the screen that opens it.
+        // The launcher keeps the first addFiles, so read state here, not vals like screen/realClaim.
         fun addFiles(files: List<PlatformFile>?) {
             if (files.isNullOrEmpty()) return
+            val target = uploadTarget
+            val onServerScreen =
+                screenName == ClientScreen.Reply.name || screenName == ClientScreen.Materials.name
+            if (!inspection && !demo && client.claim.id != null && onServerScreen && target != null) {
+                uploadToServer(files, target)
+                return
+            }
             scope.launch {
                 loadingFiles = true
                 try {
@@ -193,10 +236,10 @@ private fun ClientApp(
                         if (isPhoto) photoReplaced = true
                         formatError = false
                     }
-                    if (screen == ClientScreen.PhotoQuality && photoReplaced) back()
+                    if (screenName == ClientScreen.PhotoQuality.name && photoReplaced) back()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
                     message = "Не удалось прочитать файл. Попробуйте выбрать его ещё раз."
                 } finally {
                     loadingFiles = false
@@ -235,7 +278,7 @@ private fun ClientApp(
                     download(name, Res.readBytes("files/$file"))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
                     message = "Не удалось открыть документ"
                 }
             }
@@ -287,33 +330,64 @@ private fun ClientApp(
                                     state = claims,
                                     tab = claimsTab,
                                     onTab = { claimsTab = it },
-                                    onNew = { open(ClientScreen.Contract) },
-                                    // «Ход обработки» и «Завершено» — из API, остальные пока по макету.
+                                    onNew = {
+                                        if (realForm) client.startNewClaim()
+                                        open(ClientScreen.Contract)
+                                    },
                                     onOpen = ::openListedClaim,
                                     onPolicies = { dialog = "policies" },
                                     onRetry = { if (!demo) client.loadClaims() },
                                 )
-                            ClientScreen.Contract -> ContractScreen(draft) { dialog = "policy" }
+                            ClientScreen.Contract ->
+                                if (realForm)
+                                    DraftContractScreen(
+                                        client.draft,
+                                        claims.policies,
+                                        client.claim.details?.claimNumber,
+                                        client::updateForm,
+                                    )
+                                else ContractScreen(draft) { dialog = "policy" }
                             ClientScreen.Event ->
-                                EventScreen(draft, errors) { dialog = "participants" }
-                            ClientScreen.Materials ->
-                                MaterialsScreen(
-                                    tab = materialTab,
-                                    onTab = { materialTab = it },
-                                    attachments = attachments,
-                                    photoReplaced = photoReplaced,
-                                    formatError = formatError,
-                                    onUpload = pickFiles,
-                                    onPhoto = { dark ->
-                                        if (dark) open(ClientScreen.PhotoQuality)
-                                        else dialog = "photo"
-                                    },
-                                    onRemove = { file ->
-                                        attachments = attachments.filterNot { it === file }
-                                        photoReplaced = attachments.any { it.isPhoto }
-                                    },
-                                    onDocument = { saveDocument(false) },
-                                )
+                                if (realForm) DraftEventScreen(client.draft, client::updateForm)
+                                else EventScreen(draft, errors) { dialog = "participants" }
+                            ClientScreen.Materials -> {
+                                val details = client.claim.details
+                                if (realForm && details != null)
+                                    DraftMaterialsScreen(
+                                        details,
+                                        client.draft.selectedType?.documents.orEmpty(),
+                                        client.reply,
+                                        onPickFiles = { doc ->
+                                            uploadTarget = UploadTarget(doc.documentType, doc.name)
+                                            pickFiles()
+                                        },
+                                        onTakePhoto = { doc ->
+                                            uploadTarget = UploadTarget(doc.documentType, doc.name)
+                                            takePhoto()
+                                        },
+                                        onDelete = { file -> client.deleteDraftFile(file.id) },
+                                    )
+                                else if (realForm)
+                                    ScreenBody { LoadingOrError(client.claim, client::reloadClaim) }
+                                else
+                                    MaterialsScreen(
+                                        tab = materialTab,
+                                        onTab = { materialTab = it },
+                                        attachments = attachments,
+                                        photoReplaced = photoReplaced,
+                                        formatError = formatError,
+                                        onUpload = pickFiles,
+                                        onPhoto = { dark ->
+                                            if (dark) open(ClientScreen.PhotoQuality)
+                                            else dialog = "photo"
+                                        },
+                                        onRemove = { file ->
+                                            attachments = attachments.filterNot { it === file }
+                                            photoReplaced = attachments.any { it.isPhoto }
+                                        },
+                                        onDocument = { saveDocument(false) },
+                                    )
+                            }
                             ClientScreen.PhotoQuality -> PhotoQualityScreen()
                             ClientScreen.Review ->
                                 ReviewScreen(
@@ -340,16 +414,38 @@ private fun ClientApp(
                                         onDetails = { dialog = "details" },
                                         onReply = { open(ClientScreen.Reply) },
                                     )
-                            ClientScreen.Request -> RequestScreen()
+                            ClientScreen.Request ->
+                                if (realClaim) ClaimRequestScreen(client.claim, client::reloadClaim)
+                                else RequestScreen()
                             ClientScreen.Reply ->
-                                ReplyScreen(
-                                    draft,
-                                    claimNumber,
-                                    attachments.lastOrNull { it.isPhoto },
-                                    onRequest = { open(ClientScreen.Request) },
-                                    onUpload = pickFiles,
-                                    onDocument = { saveDocument(false) },
-                                )
+                                if (realClaim)
+                                    ClaimReplyScreen(
+                                        client.claim,
+                                        client.reply,
+                                        replyFields,
+                                        onField = { name, value ->
+                                            replyFields = replyFields + (name to value)
+                                        },
+                                        onPickFiles = { item ->
+                                            uploadTarget = UploadTarget.of(item)
+                                            pickFiles()
+                                        },
+                                        onTakePhoto = { item ->
+                                            uploadTarget = UploadTarget.of(item)
+                                            takePhoto()
+                                        },
+                                        onRequest = ::back,
+                                        onRetry = client::reloadClaim,
+                                    )
+                                else
+                                    ReplyScreen(
+                                        draft,
+                                        claimNumber,
+                                        attachments.lastOrNull { it.isPhoto },
+                                        onRequest = { open(ClientScreen.Request) },
+                                        onUpload = pickFiles,
+                                        onDocument = { saveDocument(false) },
+                                    )
                             ClientScreen.Completed ->
                                 if (realClaim)
                                     ClaimCompletedScreen(client.claim, client::reloadClaim)
@@ -385,24 +481,45 @@ private fun ClientApp(
                             unread = notifications.unreadCount,
                         )
                     ClientScreen.Contract ->
-                        ActionFooter("Продолжить", { continueForm(ClientScreen.Event) })
+                        if (realForm)
+                            ActionFooter(
+                                if (client.draft.saving) "Сохраняем…" else "Продолжить",
+                                { client.saveContract { continueForm(ClientScreen.Event) } },
+                                enabled = !client.draft.saving && !client.draft.loading,
+                            )
+                        else ActionFooter("Продолжить", { continueForm(ClientScreen.Event) })
                     ClientScreen.Event ->
-                        ActionFooter(
-                            "К материалам",
-                            {
-                                errors = validateEvent(draft)
-                                if (errors.isEmpty()) continueForm(ClientScreen.Materials)
-                            },
-                        )
+                        if (realForm)
+                            ActionFooter(
+                                if (client.draft.saving) "Сохраняем…" else "К материалам",
+                                { client.saveEvent { continueForm(ClientScreen.Materials) } },
+                                enabled = !client.draft.saving,
+                            )
+                        else
+                            ActionFooter(
+                                "К материалам",
+                                {
+                                    errors = validateEvent(draft)
+                                    if (errors.isEmpty()) continueForm(ClientScreen.Materials)
+                                },
+                            )
+                    // Проверка перед отправкой (06) для настоящего черновика — следующий шаг, пока по макету.
                     ClientScreen.Materials ->
-                        ActionFooter(
-                            if (loadingFiles) "Добавляем файлы…" else "Проверить материалы",
-                            {
-                                if (photoReplaced) continueForm(ClientScreen.Review)
-                                else open(ClientScreen.PhotoQuality)
-                            },
-                            enabled = !loadingFiles,
-                        )
+                        if (realForm)
+                            ActionFooter(
+                                if (client.reply.uploading) "Загружаем файлы…" else "Проверить материалы",
+                                { continueForm(ClientScreen.Review) },
+                                enabled = !client.reply.uploading,
+                            )
+                        else
+                            ActionFooter(
+                                if (loadingFiles) "Добавляем файлы…" else "Проверить материалы",
+                                {
+                                    if (photoReplaced) continueForm(ClientScreen.Review)
+                                    else open(ClientScreen.PhotoQuality)
+                                },
+                                enabled = !loadingFiles,
+                            )
                     ClientScreen.PhotoQuality ->
                         ActionFooter(
                             "Сделать новое фото",
@@ -434,19 +551,49 @@ private fun ClientApp(
                     ClientScreen.Request ->
                         ActionFooter(
                             "Добавить материалы",
-                            { open(ClientScreen.Reply) },
+                            {
+                                val details = client.claim.details
+                                if (realClaim && details != null) {
+                                    client.resetReply()
+                                    // Подставляем текущие значения: сервер принимает и подтверждение прежнего.
+                                    replyFields =
+                                        details.openInfoRequest?.items.orEmpty()
+                                            .mapNotNull { it.fieldName }
+                                            .filter(::isTextField)
+                                            .associateWith { currentFieldValue(details, it) }
+                                }
+                                open(ClientScreen.Reply)
+                            },
+                            enabled = !realClaim || client.claim.details?.openInfoRequest != null,
                             link = "Открыть исходное обращение",
                             onLink = { open(ClientScreen.Progress) },
                         )
                     ClientScreen.Reply ->
-                        ActionFooter(
-                            "Отправить дополнение",
-                            {
-                                repliedClaim = claimNumber
-                                open(ClientScreen.Progress)
-                            },
-                            enabled = !loadingFiles,
-                        )
+                        if (realClaim) {
+                            val reply = client.reply
+                            ActionFooter(
+                                if (reply.sending) "Отправляем…" else "Отправить дополнение",
+                                {
+                                    val requested =
+                                        client.claim.details?.openInfoRequest?.items.orEmpty()
+                                            .filter { !it.isFulfilled }
+                                            .mapNotNull { it.fieldName }
+                                    client.sendReply(replyFields.filterKeys { it in requested }) {
+                                        home()
+                                        open(ClientScreen.Progress)
+                                    }
+                                },
+                                enabled = !reply.uploading && !reply.sending,
+                            )
+                        } else
+                            ActionFooter(
+                                "Отправить дополнение",
+                                {
+                                    repliedClaim = claimNumber
+                                    open(ClientScreen.Progress)
+                                },
+                                enabled = !loadingFiles,
+                            )
                     ClientScreen.Completed -> ActionFooter("К обращениям", ::home, secondary = true)
                 }
             }

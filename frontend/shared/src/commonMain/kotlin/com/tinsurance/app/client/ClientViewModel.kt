@@ -8,17 +8,25 @@ import androidx.lifecycle.viewModelScope
 import com.tinsurance.app.data.ApiException
 import com.tinsurance.app.data.MobileApiClient
 import com.tinsurance.app.data.normalizePhone
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import ru.tinsurance.api.ClaimField
 import ru.tinsurance.api.ClaimStatus
+import ru.tinsurance.api.InfoRequestItemDto
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.UserDto
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.ClaimListItem
+import ru.tinsurance.api.mobile.CreateClaimRequest
+import ru.tinsurance.api.mobile.EventTypeDto
 import ru.tinsurance.api.mobile.NotificationDto
 import ru.tinsurance.api.mobile.TimelineEvent
+import ru.tinsurance.api.mobile.UpdateClaimRequest
 
 data class LoginState(val loading: Boolean = false, val error: String? = null)
 
@@ -52,6 +60,20 @@ data class NotificationsState(
     val unreadCount: Int = 0,
 )
 
+/** Новое обращение: справочник типов, форма, ошибки полей и общий статус сохранения. */
+data class DraftState(
+    val eventTypes: List<EventTypeDto> = emptyList(),
+    val form: ClaimForm = ClaimForm(),
+    val errors: Map<String, String> = emptyMap(),
+    val loading: Boolean = false,
+    val saving: Boolean = false,
+    val error: String? = null,
+) {
+    val selectedType get() = eventTypes.find { it.code == form.eventType }
+}
+
+// ReplyState, UploadedFile, isTextField и fieldsUpdate — в ReplyState.kt.
+
 class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : ViewModel() {
     var user by mutableStateOf<UserDto?>(null)
         private set
@@ -67,6 +89,210 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
 
     var notifications by mutableStateOf(NotificationsState())
         private set
+
+    var reply by mutableStateOf(ReplyState())
+        private set
+
+    /** Загрузка по пункту запроса: тип документа и, если просили, файл на замену. */
+    fun uploadReplyFiles(files: List<Pair<String, ByteArray>>, item: InfoRequestItemDto) {
+        val documentType = item.documentType ?: return
+        uploadFiles(files, documentType, item.documentTypeName ?: documentType, item.fileId)
+    }
+
+    /**
+     * Загружает файлы в открытое обращение (черновик или ответ на запрос). После загрузки
+     * обновляем обращение: сервер сам отмечает выполненные пункты и проверяет качество фото.
+     */
+    fun uploadFiles(
+        files: List<Pair<String, ByteArray>>,
+        documentType: String,
+        documentTypeName: String,
+        replacesFileId: Long? = null,
+    ) {
+        val claimId = claim.id ?: return
+        if (reply.uploading || files.isEmpty()) return
+        reply = reply.copy(uploading = true, error = null)
+        viewModelScope.launch {
+            var uploads = reply.uploads
+            var error: String? = null
+            for ((name, bytes) in files) {
+                try {
+                    val result = api.uploadFile(claimId, documentType, name, bytes, replacesFileId)
+                    uploads = uploads + UploadedFile(name, documentTypeName, result)
+                } catch (e: ApiException) {
+                    checkSession(e)
+                    error = "$name: ${e.message}"
+                }
+            }
+            reply = reply.copy(uploading = false, uploads = uploads, error = error)
+            refreshClaimDetails()
+            // Качество фото сервер проверяет в фоне за несколько секунд: подтягиваем итог.
+            for (pause in listOf(2_000L, 4_000L)) {
+                delay(pause)
+                refreshClaimDetails()
+            }
+        }
+    }
+
+    /** Сохраняет ответы на запрошенные поля и отправляет обращение повторно. */
+    fun sendReply(fields: Map<String, String>, onSent: () -> Unit) {
+        val claimId = claim.id ?: return
+        if (reply.sending || reply.uploading) return
+        reply = reply.copy(sending = true, error = null)
+        viewModelScope.launch {
+            try {
+                if (fields.isNotEmpty()) api.updateClaim(claimId, fieldsUpdate(fields))
+                api.submit(claimId)
+                reply = ReplyState()
+                openClaim(claimId)
+                onSent()
+            } catch (e: ApiException) {
+                checkSession(e)
+                reply = reply.copy(sending = false, error = e.message)
+                refreshClaimDetails()
+            }
+        }
+    }
+
+    fun resetReply() {
+        reply = ReplyState()
+    }
+
+    // ---- Новое обращение: экраны 02–04 ----
+
+    var draft by mutableStateOf(DraftState())
+        private set
+
+    /** UUID нового черновика: повтор «Продолжить» при плохой связи не создаст второй. */
+    private var draftRequestId: String? = null
+
+    @OptIn(ExperimentalUuidApi::class)
+    fun startNewClaim() {
+        openClaim(null)
+        reply = ReplyState()
+        draftRequestId = Uuid.random().toString()
+        draft =
+            DraftState(
+                eventTypes = draft.eventTypes,
+                form =
+                    ClaimForm(
+                        policyId = claims.policies.singleOrNull()?.id,
+                        text = user?.phone?.let { mapOf(ClaimField.CONTACT_PHONE.apiName to it) }.orEmpty(),
+                    ),
+            )
+        loadEventTypes()
+    }
+
+    /** Продолжение черновика из списка «Черновики». */
+    fun openDraft(id: Long) {
+        reply = ReplyState()
+        draftRequestId = null
+        draft = DraftState(eventTypes = draft.eventTypes, loading = true)
+        openClaim(id)
+        loadEventTypes()
+        viewModelScope.launch {
+            try {
+                val details = api.claim(id)
+                draft = draft.copy(loading = false, form = details.toForm(user?.phone))
+            } catch (e: ApiException) {
+                checkSession(e)
+                draft = draft.copy(loading = false, error = e.message)
+            }
+        }
+    }
+
+    fun updateForm(change: (ClaimForm) -> ClaimForm) {
+        draft = draft.copy(form = change(draft.form), errors = emptyMap(), error = null)
+    }
+
+    /** Экран 02: создаём черновик или меняем у него полис и тип события. */
+    fun saveContract(onSaved: () -> Unit) {
+        val form = draft.form
+        if (form.policyId == null || form.eventType == null) {
+            draft = draft.copy(error = "Выберите договор и что случилось")
+            return
+        }
+        persist(onSaved) { claimId ->
+            if (claimId == null)
+                api.createClaim(
+                    CreateClaimRequest(
+                        policyId = form.policyId,
+                        eventType = form.eventType,
+                        contactPhone = form.text[ClaimField.CONTACT_PHONE.apiName],
+                        clientRequestId = draftRequestId,
+                    )
+                )
+            else api.updateClaim(claimId, UpdateClaimRequest(policyId = form.policyId, eventType = form.eventType))
+        }
+    }
+
+    /** Экран 03: проверяем поля у себя и сохраняем всё одним PATCH. */
+    fun saveEvent(onSaved: () -> Unit) {
+        val type = draft.selectedType
+        val errors = validateForm(draft.form, type)
+        if (errors.isNotEmpty()) {
+            draft = draft.copy(errors = errors)
+            return
+        }
+        val name = user?.fullName ?: "Заявитель"
+        persist(onSaved) { claimId ->
+            api.updateClaim(claimId ?: return@persist null, draft.form.toUpdate(type, name, user?.phone))
+        }
+    }
+
+    /** Экран 04: лишний файл в черновике удаляется (на сервере помечается DELETED). */
+    fun deleteDraftFile(fileId: Long) {
+        val claimId = claim.id ?: return
+        viewModelScope.launch {
+            try {
+                api.deleteFile(claimId, fileId)
+                reply = reply.copy(uploads = reply.uploads.filterNot { it.result.id == fileId })
+            } catch (e: ApiException) {
+                checkSession(e)
+                reply = reply.copy(error = e.message)
+            }
+            refreshClaimDetails()
+        }
+    }
+
+    private fun persist(onSaved: () -> Unit, save: suspend (claimId: Long?) -> ClaimDetails?) {
+        if (draft.saving) return
+        draft = draft.copy(saving = true, error = null)
+        viewModelScope.launch {
+            try {
+                val saved = save(claim.id)
+                if (saved != null) claim = claim.copy(id = saved.id, loading = false, details = saved)
+                draft = draft.copy(saving = false)
+                onSaved()
+            } catch (e: ApiException) {
+                checkSession(e)
+                draft = draft.copy(saving = false, error = e.message)
+            }
+        }
+    }
+
+    private fun loadEventTypes() {
+        if (draft.eventTypes.isNotEmpty()) return
+        viewModelScope.launch {
+            try {
+                val types = api.eventTypes()
+                draft = draft.copy(eventTypes = types)
+            } catch (e: ApiException) {
+                checkSession(e)
+                draft = draft.copy(error = e.message)
+            }
+        }
+    }
+
+    private suspend fun refreshClaimDetails() {
+        val id = claim.id ?: return
+        try {
+            val details = api.claim(id)
+            if (claim.id == id) claim = claim.copy(details = details)
+        } catch (e: ApiException) {
+            checkSession(e)
+        }
+    }
 
     private var claimJob: Job? = null
 
@@ -117,6 +343,7 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         user = null
         claims = ClaimsState()
         notifications = NotificationsState()
+        draft = DraftState()
         openClaim(null)
     }
 
@@ -228,3 +455,15 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
 
 /** Больше значок не показывает: «99+». */
 const val MaxUnreadShown = 100
+
+/** Куда загрузить выбранные файлы: тип документа и, при замене, id старого файла. */
+data class UploadTarget(val documentType: String, val name: String, val replacesFileId: Long? = null) {
+    companion object {
+        fun of(item: InfoRequestItemDto) =
+            UploadTarget(
+                item.documentType.orEmpty(),
+                item.documentTypeName ?: item.documentType.orEmpty(),
+                item.fileId,
+            )
+    }
+}
