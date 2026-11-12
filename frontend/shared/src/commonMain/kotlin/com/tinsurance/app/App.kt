@@ -310,7 +310,9 @@ private fun ClientApp(
             ) {
                 if (showStatusBar) PreviewStatusBar()
                 if (!inspection && !demo && client.user == null) {
-                    LoginScreen(client.login, client::login, onOperator, onAdmin, onDemo)
+                    // Есть сохранённый вход: ждём ответа сервера, а не мигаем формой входа.
+                    if (client.restoring) ScreenBody { Caption("Входим…") }
+                    else LoginScreen(client.login, client::login, onOperator, onAdmin, onDemo)
                     return@Column
                 }
                 when (screen) {

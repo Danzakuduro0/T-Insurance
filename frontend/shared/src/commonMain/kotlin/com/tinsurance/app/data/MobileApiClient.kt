@@ -48,16 +48,17 @@ class ApiException(val status: Int, message: String) : Exception(message) {
 }
 
 /**
- * Клиент `/api/mobile`. Токены хранятся в памяти: после перезапуска нужно войти снова.
- * Просроченный access-токен (15 мин) обновляется по refresh-токену автоматически.
+ * Клиент `/api/mobile`. Access-токен (15 мин) живёт в памяти и обновляется по refresh-токену
+ * автоматически; refresh-токен сохраняется в [SessionStorage], поэтому после перезапуска
+ * приложения вход восстанавливается через [restore].
  */
 @OptIn(ExperimentalUuidApi::class)
 class MobileApiClient(
     baseUrl: String = defaultApiBaseUrl,
+    private val storage: SessionStorage = SessionStorage(),
     engine: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { HttpClient(it) },
 ) {
     private var tokens: BearerTokens? = null
-    private val installationId = Uuid.random().toString()
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -70,19 +71,26 @@ class MobileApiClient(
                 loadTokens { tokens }
                 refreshTokens {
                     val refreshToken = oldTokens?.refreshToken ?: return@refreshTokens null
-                    val response =
-                        runCatching {
-                                client
-                                    .post(path(MobileApi.REFRESH)) {
-                                        markAsRefreshTokenRequest()
-                                        contentType(ContentType.Application.Json)
-                                        setBody(RefreshRequest(refreshToken))
-                                    }
-                                    .body<AuthResponse>()
-                            }
-                            .getOrNull()
-                    tokens = response?.let { BearerTokens(it.accessToken, it.refreshToken) }
-                    tokens
+                    try {
+                        val response =
+                            client
+                                .post(path(MobileApi.REFRESH)) {
+                                    markAsRefreshTokenRequest()
+                                    contentType(ContentType.Application.Json)
+                                    setBody(RefreshRequest(refreshToken))
+                                }
+                                .body<AuthResponse>()
+                        remember(response)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: ResponseException) {
+                        // Сервер отверг токен (истёк, отозван, уже использован): сессии больше нет.
+                        forget()
+                        null
+                    } catch (_: Throwable) {
+                        // Нет связи: сохранённый токен не трогаем, он ещё может сработать позже.
+                        null
+                    }
                 }
                 sendWithoutRequest { request ->
                     !request.url.pathSegments.joinToString("/").endsWith(path(MobileApi.LOGIN))
@@ -93,6 +101,47 @@ class MobileApiClient(
 
     val signedIn get() = tokens != null
 
+    /** Есть сохранённый вход с прошлого запуска — его можно восстановить через [restore]. */
+    val hasStoredSession get() = storage.refreshToken != null
+
+    /**
+     * Восстанавливает вход по сохранённому refresh-токену. null — сохранённого входа нет
+     * или сервер его больше не принимает; ApiException — нет связи (токен остаётся для новой попытки).
+     */
+    suspend fun restore(): UserDto? {
+        val refreshToken = storage.refreshToken ?: return null
+        return try {
+            val response =
+                http
+                    .post(path(MobileApi.REFRESH)) {
+                        contentType(ContentType.Application.Json)
+                        setBody(RefreshRequest(refreshToken))
+                    }
+                    .body<AuthResponse>()
+            remember(response)
+            http.authProvider<BearerAuthProvider>()?.clearToken()
+            response.user
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: ResponseException) {
+            forget()
+            null
+        } catch (_: Throwable) {
+            throw ApiException(0, "Нет связи с сервером. Проверьте подключение и попробуйте снова.")
+        }
+    }
+
+    // Refresh-токен одноразовый: каждый новый сразу сохраняем, иначе следующий запуск не войдёт.
+    private fun remember(response: AuthResponse): BearerTokens {
+        storage.refreshToken = response.refreshToken
+        return BearerTokens(response.accessToken, response.refreshToken).also { tokens = it }
+    }
+
+    private fun forget() {
+        tokens = null
+        storage.refreshToken = null
+    }
+
     suspend fun login(phone: String, password: String): UserDto = call {
         val response =
             http
@@ -102,12 +151,12 @@ class MobileApiClient(
                         MobileLoginRequest(
                             phone = phone,
                             password = password,
-                            device = DeviceInfo(installationId, devicePlatform),
+                            device = DeviceInfo(storage.installationId, devicePlatform),
                         )
                     )
                 }
                 .body<AuthResponse>()
-        tokens = BearerTokens(response.accessToken, response.refreshToken)
+        remember(response)
         // Иначе Auth продолжит отдавать закешированные токены прошлой сессии.
         http.authProvider<BearerAuthProvider>()?.clearToken()
         response.user
@@ -120,7 +169,7 @@ class MobileApiClient(
         } catch (_: ApiException) {
             // Сессия на сервере истечёт сама; локально выходим в любом случае.
         } finally {
-            tokens = null
+            forget()
             http.authProvider<BearerAuthProvider>()?.clearToken()
         }
     }

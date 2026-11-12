@@ -93,6 +93,28 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
     var login by mutableStateOf(LoginState())
         private set
 
+    /** Идёт вход по сохранённой сессии: вместо формы входа показываем ожидание. */
+    var restoring by mutableStateOf(api.hasStoredSession)
+        private set
+
+    init {
+        if (restoring) restoreSession()
+    }
+
+    private fun restoreSession() {
+        viewModelScope.launch {
+            try {
+                // null — сохранённый вход больше не действует: покажем обычную форму.
+                user = api.restore()
+            } catch (e: ApiException) {
+                // Нет связи: сохранённый вход остаётся, после перезапуска попробуем снова.
+                login = LoginState(error = e.message)
+            } finally {
+                restoring = false
+            }
+        }
+    }
+
     var claims by mutableStateOf(ClaimsState())
         private set
 
