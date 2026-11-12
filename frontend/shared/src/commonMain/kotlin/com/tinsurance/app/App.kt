@@ -12,6 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,6 +34,7 @@ import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import io.github.vinceglb.filekit.size
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
@@ -96,6 +100,22 @@ private fun ClientApp(
         // Вошли под настоящим пользователем: форма нового обращения работает с API.
         val realForm = !inspection && !demo && client.user != null
         val claimPolicy = claims.policies.find { it.id == client.claim.details?.policyId }
+        // Опрос уведомлений раз в 5 секунд, пока пользователь вошёл и приложение на экране:
+        // в свёрнутом приложении и фоновой вкладке не тратим сеть.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val currentScreen by rememberUpdatedState(screen)
+        LaunchedEffect(client.user, lifecycleOwner) {
+            if (inspection || demo || client.user == null) return@LaunchedEffect
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    delay(NotificationPollMillis)
+                    client.pollNotifications(
+                        onNotifications = currentScreen == ClientScreen.Notifications,
+                        onClaims = currentScreen == ClientScreen.Claims,
+                    )
+                }
+            }
+        }
         LaunchedEffect(screen, client.user) {
             if (inspection || demo || client.user == null) return@LaunchedEffect
             when (screen) {
