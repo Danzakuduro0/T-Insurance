@@ -65,13 +65,13 @@ class UploadService(
 
     /** Лишний файл из черновика: запись остаётся в журнале со статусом DELETED, содержимое удаляется. */
     suspend fun deleteFromDraft(clientId: Long, claimId: Long, fileId: Long) {
-        val storageKey = db.tx {
+        db.tx {
             val file = UploadRules.deletableFile(clientId, claimId, fileId)
             FileRepository.markDeleted(fileId)
             AuditWriter.record(claimId, AuditEntity.FILE, fileId, "FILE_DELETE", Actor.client(clientId))
-            file[ClaimFiles.storageKey]
+            val key = file[ClaimFiles.storageKey]
+            if (key.startsWith(FileRepository.STORED_PREFIX)) storage.delete(key)
         }
-        if (storageKey.startsWith(FileRepository.STORED_PREFIX)) withContext(Dispatchers.IO) { storage.delete(storageKey) }
     }
 
     private sealed interface Precheck {
@@ -117,7 +117,7 @@ class UploadService(
         try {
             recorder.accepted(target, file, type.isImage, key, replacesFileId)
         } catch (e: Throwable) {
-            storage.delete(key)
+            runCatching { storage.delete(key) }.exceptionOrNull()?.let(e::addSuppressed)
             throw e
         }
     }

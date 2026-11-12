@@ -132,6 +132,8 @@ HTTP → plugins/Http (лимит размера, JSON) → auth (JWT, кана�
 | `db.*` | подключение к PostgreSQL | `DB_URL`, `DB_USER`, `DB_PASSWORD` |
 | `jwt.*` | секрет и сроки жизни токенов | `JWT_SECRET` (в prod обязателен, 32+ символа) |
 | `demo.*` | заливка демо-данных | `DEMO_SEED`, `DEMO_PASSWORD` |
+| `storage.provider` | локальное хранилище или S3 | `STORAGE_PROVIDER` |
+| `storage.s3.*` | параметры закрытого бакета | см. [S3_STORAGE.md](S3_STORAGE.md) |
 | `storage.localDir` | папка с файлами (по умолчанию `~/.tstrah/files`) | `STORAGE_DIR` |
 | `files.*` | лимиты: 15 файлов и 100 МБ на обращение, 50 Мп на фото; одновременная обработка загрузок; порог похожести фото | — |
 | `security.*` | лимиты входа и размер JSON-запроса | — |
@@ -250,7 +252,7 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 | **Удалить все данные** (база и файлы с нуля) | `docker compose --profile app down -v` |
 
 - Сервер в контейнере по умолчанию работает в dev: демо-учётки, случайный JWT-секрет. Для показа задайте в `.env` `APP_MODE=prod` и `JWT_SECRET`.
-- Файлы обращений из контейнера лежат в томе `files`, а не в `~/.tstrah/files`.
+- В режиме `local` контейнер хранит файлы в томе `files`. В режиме `s3` содержимое хранится в закрытом бакете.
 - Сервер из IntelliJ и сервер в контейнере используют один порт 8080, поэтому запускайте что-то одно.
 
 ## Тесты
@@ -282,7 +284,6 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 | Шаг | Что | Решения, принятые заранее |
 |---|---|---|
-| 9 | Хранилище S3 | OpenAPI и Swagger UI реализованы; S3 отложено |
 | 10 | Нагрузочный профиль, сценарий демо | |
 
 Таблицы для шагов 3–8 (`background_jobs`, `image_analyses`, `claim_decisions`, `notifications`) уже есть в схеме.
@@ -312,4 +313,8 @@ DRAFT ──client──▶ SUBMITTED ──system──▶ IN_ANALYSIS ──sy
 
 ## OpenAPI и Swagger UI
 
-`/swagger` — интерактивная документация, `/openapi.json` — контракт. [Инструкция](OPENAPI.md). S3 остаётся отдельной задачей.
+`/swagger` — интерактивная документация, `/openapi.json` — контракт. [Инструкция](OPENAPI.md).
+
+### S3 реализовано
+
+`FileStorageFactory` выбирает `LocalFileStorage` или `S3FileStorage` по конфигурации. См. [S3_STORAGE.md](S3_STORAGE.md).
