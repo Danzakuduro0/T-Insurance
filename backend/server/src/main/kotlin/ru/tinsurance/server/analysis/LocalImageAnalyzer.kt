@@ -8,6 +8,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.nio.file.NoSuchFileException
 import javax.imageio.ImageIO
 import kotlin.math.ceil
 import kotlin.math.max
@@ -23,9 +25,10 @@ class LocalImageAnalyzer(private val storage: FileStorage) : ImageAnalyzer {
         val bytes = withContext(Dispatchers.IO) {
             try {
                 storage.open(request.storageKey).use { it.readBytes() }
-            } catch (e: java.nio.file.NoSuchFileException) {
-                // файла нет в этом хранилище (например, загружен сервером из Docker) — повтор не поможет
-                throw AnalyzerRejectedException("Файл не найден в хранилище: ${request.storageKey}")
+            } catch (_: NoSuchFileException) {
+                throw AnalyzerRejectedException("Файл не найден в хранилище")
+            } catch (_: IOException) {
+                throw AnalyzerUnavailableException("Не удалось прочитать файл из хранилища")
             }
         }
         return withContext(Dispatchers.Default) { measure(bytes) }

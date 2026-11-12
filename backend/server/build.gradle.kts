@@ -13,6 +13,8 @@ application {
 dependencies {
     api(project(":core"))
     implementation("org.webjars:swagger-ui:5.34.1")
+    implementation(libs.aws.s3)
+    implementation(libs.aws.urlConnection)
     implementation(libs.logback)
     implementation(libs.ktor.serverCore)
     implementation(libs.ktor.serverNetty)

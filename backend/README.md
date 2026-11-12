@@ -46,7 +46,7 @@ Files: `POST /claims/{id}/files` (multipart: `documentType`, `file`, optional `c
 201 accepted, 200 duplicate/retry, 422 rejected with `rejectionReason` and `hint`, 413 too large),
 `GET /claims/{id}/files/{fileId}/content`, `DELETE /claims/{id}/files/{fileId}` (only in a draft: an extra file is marked
 `DELETED` and its content is removed; after submit files are replaced via `replacesFileId`). Format is checked by content (JPEG, PNG, PDF), metadata (EXIF/GPS) is
-removed from photos, files are stored in `STORAGE_DIR` (default `~/.tstrah/files`). Login endpoints are rate-limited
+removed from photos, files are stored locally by default or in [S3](docs/S3_STORAGE.md). Login endpoints are rate-limited
 and a login is locked for 5 minutes after 5 failed attempts.
 
 Photo analysis (step 3) runs in the background right after upload: with `ML_URL` set the server calls the ML service
@@ -125,4 +125,10 @@ API, permissions and Postman instructions: [docs/OPERATOR_ACTIONS.md](docs/OPERA
 
 ## OpenAPI и Swagger UI
 
-`/swagger` — интерактивная документация, `/openapi.json` — контракт. [Инструкция](docs/OPENAPI.md). S3 остаётся отдельной задачей.
+`/swagger` — интерактивная документация, `/openapi.json` — контракт. [Инструкция](docs/OPENAPI.md).
+
+
+## S3 для вложений
+
+Сервер поддерживает закрытый S3-бакет Cloud.ru через `FileStorage`. Переменные окружения,
+запуск Docker и подключение ML описаны в [S3_STORAGE.md](docs/S3_STORAGE.md).

@@ -12,7 +12,7 @@ import java.time.Duration
 
 /**
  * Клиент ML Image Service: POST {mlUrl}/analyze (раздел 6.2 требований).
- * Сервис читает файл сам по storage_key (общая папка с файлами в Docker Compose, позже — S3).
+ * Сервис читает файл сам по storage_key.
  * Ошибки делятся на «повторить позже» (недоступен, перегружен, нет ответа за 10 с) и «повтор не поможет».
  */
 class HttpImageAnalyzer(

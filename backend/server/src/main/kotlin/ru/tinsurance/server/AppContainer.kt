@@ -21,7 +21,7 @@ import ru.tinsurance.server.common.days
 import ru.tinsurance.server.common.tx
 import ru.tinsurance.server.files.FileAccessService
 import ru.tinsurance.server.files.FilesConfig
-import ru.tinsurance.server.files.LocalFileStorage
+import ru.tinsurance.server.files.storage.FileStorageFactory
 import ru.tinsurance.server.files.UploadService
 import ru.tinsurance.server.jobs.JobWorker
 import ru.tinsurance.server.jobs.WorkerConfig
@@ -45,10 +45,10 @@ class AppContainer(
     val database: Database,
     val tokens: TokenService,
     timeZone: ZoneId,
-) {
+) : AutoCloseable {
     private val claimsConfig = ClaimsConfig.from(config)
     private val filesConfig = FilesConfig.from(config)
-    private val storage = LocalFileStorage(filesConfig.storageDir)
+    private val storage = FileStorageFactory.create(config, filesConfig)
 
     val notifications = NotificationService(database)
     val auth = AuthService(database, tokens, LoginThrottle(LoginThrottleConfig.from(config)))
@@ -81,6 +81,8 @@ class AppContainer(
             { database.tx { autoAssigner.sweep() } },
         ),
     )
+
+    override fun close() = storage.close()
 
     /** Без ML_URL — локальная проверка качества, вид повреждения не определяется. */
     private fun imageAnalyzer(): ImageAnalyzer =

@@ -36,6 +36,7 @@ fun Application.module() {
     demoPassword?.let { DemoData.seedIfEmpty(database, it) }
 
     val app = AppContainer(config, database, tokens, appTimeZone)
+    monitor.subscribe(ApplicationStopped) { app.close() }
     configureHttp(config.list("cors.allowedHosts"), mode, BodyLimits.from(config))
     configureSecurity(tokens, config.int("security.authRequestsPerMinute", 30), app.auth::isSessionActive)
     configureRouting(app)

@@ -12,7 +12,7 @@ services:
       POSTGRES_USER: tstrah
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tstrah}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -41,13 +41,22 @@ services:
       APP_TIME_ZONE: ${APP_TIME_ZONE:-Europe/Moscow}
       # адрес ML-сервиса; пусто — локальная проверка качества фото. С сервисом ниже: ML_URL=http://ml:8000
       ML_URL: ${ML_URL:-}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru-central-1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PATH_STYLE: ${S3_PATH_STYLE:-true}
+      S3_TIMEOUT_SECONDS: ${S3_TIMEOUT_SECONDS:-30}
+      S3_CONNECT_TIMEOUT_SECONDS: ${S3_CONNECT_TIMEOUT_SECONDS:-5}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - files:/data/files
 
   # ML Image Service (раздел 6 требований) — раскомментировать, когда будет образ от ML-инженера.
-  # Читает фото по storage_key из той же папки, что и сервер, только на чтение.
+  # В режиме local читает фото из общего тома. Для S3 см. docs/S3_STORAGE.md.
   # ml:
   #   profiles: ["app"]
   #   image: tstrah-ml:latest

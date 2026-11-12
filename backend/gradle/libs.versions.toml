@@ -24,7 +24,11 @@ embeddedPostgresBinaries = "16.15.0"
 bcrypt = "0.10.2"
 kotlinxSerialization = "1.11.0"
 
+awsSdk = "2.57.13"
+
 [libraries]
+aws-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awsSdk" }
+aws-urlConnection = { module = "software.amazon.awssdk:url-connection-client", version.ref = "awsSdk" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }

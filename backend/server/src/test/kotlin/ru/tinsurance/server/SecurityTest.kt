@@ -66,7 +66,7 @@ class SecurityTest {
     @Test
     fun databasePortBoundToLocalhostOnly() {
         val compose = File("../docker-compose.yml").readText()
-        assertTrue(compose.contains("\"127.0.0.1:5432:5432\""), "Порт Postgres должен быть привязан к 127.0.0.1")
+        assertTrue(compose.contains("\"127.0.0.1:\${POSTGRES_HOST_PORT:-5432}:5432\""), "Порт Postgres должен быть привязан к 127.0.0.1")
         assertFalse(Regex("""-\s*"5432:5432"""").containsMatchIn(compose))
     }
 

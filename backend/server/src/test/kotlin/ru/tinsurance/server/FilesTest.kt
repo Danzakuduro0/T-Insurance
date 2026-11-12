@@ -16,6 +16,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import ru.tinsurance.server.files.FileInspector
 import ru.tinsurance.server.files.PerceptualHash
+import ru.tinsurance.server.files.StubS3Bucket
 import java.awt.Color
 import java.awt.GradientPaint
 import java.awt.RenderingHints
@@ -196,6 +197,56 @@ class FilesTest {
             append("documentType", "DAMAGE_PHOTO")
             append("file", jpeg(3), Headers.build { append(HttpHeaders.ContentDisposition, "filename=\"x.jpg\"") })
         }) { bearerAuth(ivan) }.status)
+    }
+
+    @Test
+    fun s3StoresDraftFilesAndDoesNotExposeThemToOtherClients() = StubS3Bucket().use { bucket ->
+        apiTest(bucket.config()) { http ->
+            val owner = http.anna()
+            val claim = owner.accidentDraft()
+            val upload = owner.upload(claim.id, "DAMAGE_PHOTO", jpeg(57))
+            assertEquals(HttpStatusCode.Created, upload.status)
+            val file = upload.body<ClaimFileDto>()
+            val path = MobileApi.CLAIM_FILE.path("id" to claim.id, "fileId" to file.id)
+            val stored = bucket.objects.values.single()
+
+            val other = http.loginClient(DemoData.CLIENT_IVAN, installationId = "s3-files-ivan").accessToken
+            assertEquals(HttpStatusCode.NotFound, http.get("$path/content") { bearerAuth(other) }.status)
+            assertEquals(0, bucket.reads.get())
+            val downloaded = http.get("$path/content") { bearerAuth(owner.token) }
+            assertEquals(HttpStatusCode.OK, downloaded.status)
+            assertContentEquals(stored, downloaded.readRawBytes())
+            assertEquals(HttpStatusCode.NoContent, http.delete(path) { bearerAuth(owner.token) }.status)
+            assertTrue(bucket.objects.isEmpty())
+        }
+    }
+
+    @Test
+    fun s3WriteFailuresLeaveDraftConsistentAndCanBeRetried() = StubS3Bucket().use { bucket ->
+        apiTest(bucket.config()) { http ->
+            val owner = http.anna()
+            val claim = owner.accidentDraft()
+            val bytes = jpeg(58)
+            val requestId = UUID.randomUUID().toString()
+            bucket.deniedMethod = "PUT"
+            val failed = owner.upload(claim.id, "DAMAGE_PHOTO", bytes, requestId = requestId)
+            assertEquals(HttpStatusCode.InternalServerError, failed.status)
+            assertFalse(failed.bodyAsText().contains(StubS3Bucket.SECRET))
+            assertTrue(http.get("/api/mobile/claims/${claim.id}") { bearerAuth(owner.token) }.body<ClaimDetails>().files.isEmpty())
+
+            bucket.deniedMethod = null
+            val upload = owner.upload(claim.id, "DAMAGE_PHOTO", bytes, requestId = requestId)
+            assertEquals(HttpStatusCode.Created, upload.status)
+            val file = upload.body<ClaimFileDto>()
+            val path = MobileApi.CLAIM_FILE.path("id" to claim.id, "fileId" to file.id)
+            bucket.deniedMethod = "DELETE"
+            assertEquals(HttpStatusCode.InternalServerError, http.delete(path) { bearerAuth(owner.token) }.status)
+            assertEquals(HttpStatusCode.OK, http.get("$path/content") { bearerAuth(owner.token) }.status)
+
+            bucket.deniedMethod = null
+            assertEquals(HttpStatusCode.NoContent, http.delete(path) { bearerAuth(owner.token) }.status)
+            assertTrue(bucket.objects.isEmpty())
+        }
     }
 
     @Test
