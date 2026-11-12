@@ -492,6 +492,34 @@ class ClientViewModel(private val api: MobileApiClient = MobileApiClient()) : Vi
         }
     }
 
+    /**
+     * Один шаг опроса (ТЗ 4.2.3: каждые 5 секунд). Тихий: без индикаторов загрузки и без ошибок
+     * на экране — при сбое связи просто ждём следующего шага.
+     * На экране уведомлений подмешивает новые в начало списка и обновляет отметки «прочитано»;
+     * на списке обращений при новом уведомлении перезагружает список — у обращения сменился статус.
+     */
+    suspend fun pollNotifications(onNotifications: Boolean, onClaims: Boolean) {
+        if (user == null) return
+        try {
+            val unread = unreadCount()
+            val grew = unread > notifications.unreadCount
+            if (onNotifications && !notifications.loading) {
+                val page = api.notifications()
+                notifications =
+                    notifications.copy(
+                        items = mergeNewest(page.items, notifications.items),
+                        // Пока ничего не подгружали «Показать ещё», берём курсор свежей страницы.
+                        nextBeforeId =
+                            if (notifications.items.isEmpty()) page.nextBeforeId else notifications.nextBeforeId,
+                        unreadCount = unread,
+                    )
+            } else notifications = notifications.copy(unreadCount = unread)
+            if (grew && onClaims) loadClaims()
+        } catch (e: ApiException) {
+            checkSession(e)
+        }
+    }
+
     /** Для значка на колокольчике: вызывается при возврате к списку обращений. */
     fun refreshUnreadCount() {
         viewModelScope.launch {
@@ -549,4 +577,16 @@ data class UploadTarget(val documentType: String, val name: String, val replaces
                 item.fileId,
             )
     }
+}
+
+/** Интервал опроса уведомлений из ТЗ (раздел 4.2.3). */
+const val NotificationPollMillis = 5_000L
+
+/**
+ * Свежая первая страница поверх уже загруженного списка: новые и изменённые берём со страницы,
+ * старые (подгруженные «Показать ещё») оставляем. Порядок — по id, новые сверху, как отдаёт сервер.
+ */
+fun mergeNewest(fresh: List<NotificationDto>, loaded: List<NotificationDto>): List<NotificationDto> {
+    val freshIds = fresh.mapTo(HashSet()) { it.id }
+    return (fresh + loaded.filter { it.id !in freshIds }).sortedByDescending { it.id }
 }
