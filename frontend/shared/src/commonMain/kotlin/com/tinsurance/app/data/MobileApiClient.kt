@@ -309,6 +309,8 @@ class MobileApiClient(
         } catch (e: Throwable) {
             // Throwable, а не Exception: в браузере сбой сети приходит как kotlin.Error("Fail to fetch")
             // с JsError внутри — Exception его не ловит, и ошибка роняла корутину экрана.
+            // Пользователь видит общий текст, а настоящая причина нужна в логе (Logcat, консоль браузера).
+            println("MobileApiClient: ${e::class.simpleName}: ${e.message} (cause: ${e.cause})")
             throw ApiException(0, "Нет связи с сервером. Проверьте подключение и попробуйте снова.")
         }
 
