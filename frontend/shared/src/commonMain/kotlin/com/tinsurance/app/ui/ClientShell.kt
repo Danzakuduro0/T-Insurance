@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -34,7 +35,7 @@ fun BrandHeader(onNotifications: () -> Unit, onProfile: () -> Unit, unread: Int 
         Label("Страхование")
         Spacer(Modifier.weight(1f))
         Box(
-            Modifier.size(40.dp)
+            Modifier.size(MinTouchTarget)
                 .clickable(
                     role = Role.Button,
                     onClickLabel = "Уведомления",
@@ -45,14 +46,19 @@ fun BrandHeader(onNotifications: () -> Unit, onProfile: () -> Unit, unread: Int 
             InsuranceIcon(Res.drawable.bell_header, 24.dp)
             if (unread > 0) UnreadBadge(unread, Modifier.align(Alignment.TopEnd))
         }
-        Spacer(Modifier.width(4.dp))
+        // Круг аватара как в макете (36 px), а нажимается область 44 px вокруг него.
         Box(
-            Modifier.size(36.dp)
-                .background(InsuranceColors.Field, CircleShape)
+            Modifier.size(MinTouchTarget)
+                .clip(CircleShape)
                 .clickable(role = Role.Button, onClickLabel = "Профиль", onClick = onProfile),
             contentAlignment = Alignment.Center,
         ) {
-            Caption("АС", color = InsuranceColors.Ink)
+            Box(
+                Modifier.size(36.dp).background(InsuranceColors.Field, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Caption("АС", color = InsuranceColors.Ink)
+            }
         }
     }
 }
@@ -65,7 +71,7 @@ fun BackHeader(title: String, onBack: () -> Unit, step: Int? = null) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(
-            Modifier.size(40.dp)
+            Modifier.size(MinTouchTarget)
                 .clickable(role = Role.Button, onClickLabel = "Назад", onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {

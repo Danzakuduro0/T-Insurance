@@ -309,19 +309,22 @@ private fun ClientApp(
         }
 
         if (!inspection) PlatformBackHandler(history.isNotEmpty(), ::back)
-        Box(
+        BoxWithConstraints(
             Modifier.fillMaxSize()
                 .background(if (showStatusBar) InsuranceColors.Field else Color.White)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .imePadding(),
             contentAlignment = Alignment.TopCenter,
         ) {
+            // Рамка «телефона» — только для сравнения с макетом; иначе раскладка по ширине окна.
+            val windowWidth = if (showStatusBar) WindowWidth.Compact else WindowWidth.of(maxWidth)
             val frameSize =
                 if (showStatusBar) {
                     Modifier.widthIn(max = 390.dp).heightIn(max = 844.dp)
                 } else {
-                    Modifier.widthIn(max = 480.dp)
+                    Modifier.widthIn(max = windowWidth.contentMaxWidth)
                 }
+            CompositionLocalProvider(LocalWindowWidth provides windowWidth) {
             Column(
                 frameSize
                     .fillMaxSize()
@@ -695,6 +698,7 @@ private fun ClientApp(
                             )
                     ClientScreen.Completed -> ActionFooter("К обращениям", ::home, secondary = true)
                 }
+            }
             }
         }
         if (dialog != null)

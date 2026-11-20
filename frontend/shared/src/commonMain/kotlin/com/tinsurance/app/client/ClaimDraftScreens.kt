@@ -15,6 +15,7 @@ import ru.tinsurance.api.FileStatus
 import ru.tinsurance.api.PolicyDto
 import ru.tinsurance.api.mobile.ClaimDetails
 import ru.tinsurance.api.mobile.FormDocumentDto
+import ru.tinsurance.api.mobile.FormFieldDto
 import tinsurance.shared.generated.resources.*
 
 // Экраны 02–04 нового обращения на данных API. Демо-версии — в ClaimFormScreens.kt и MaterialScreens.kt.
@@ -26,15 +27,18 @@ fun DraftContractScreen(
     claimNumber: String?,
     onChange: ((ClaimForm) -> ClaimForm) -> Unit,
 ) {
+    // От 481 px карточки событий и договоров идут по две в ряд (ТЗ 5.2).
+    val twoColumns = LocalWindowWidth.current.atLeastMedium
     ScreenBody {
         PageTitle("Что случилось?")
         if (draft.eventTypes.isEmpty()) {
             if (draft.error != null) Notice(draft.error) else Caption("Загружаем виды событий…")
             return@ScreenBody
         }
-        for (type in draft.eventTypes) {
+        CardGrid(draft.eventTypes, twoColumns) { type, cardModifier ->
             val selected = draft.form.eventType == type.code
             InsuranceCard(
+                cardModifier,
                 border = if (selected) InsuranceColors.Yellow else InsuranceColors.Line,
                 padding = 16.dp,
                 onClick = { onChange { it.copy(eventType = type.code) } },
@@ -49,9 +53,10 @@ fun DraftContractScreen(
         }
         Text("Выберите договор", style = MaterialTheme.typography.titleMedium)
         if (policies.isEmpty()) Notice("Активных договоров нет — оформить обращение не получится.")
-        for (policy in policies) {
+        CardGrid(policies, twoColumns) { policy, cardModifier ->
             val selected = draft.form.policyId == policy.id
             InsuranceCard(
+                cardModifier,
                 border = if (selected) InsuranceColors.Yellow else InsuranceColors.Line,
                 padding = 16.dp,
                 onClick = { onChange { it.copy(policyId = policy.id) } },
@@ -73,10 +78,39 @@ fun DraftContractScreen(
     }
 }
 
+/**
+ * Карточки в одну колонку или, на планшете, по две в ряд. Карточки в ряду одной высоты,
+ * чтобы рамки выбора стояли ровно; нечётная последняя занимает половину ширины.
+ */
+@Composable
+private fun <T> CardGrid(
+    items: List<T>,
+    twoColumns: Boolean,
+    card: @Composable (item: T, modifier: Modifier) -> Unit,
+) {
+    if (!twoColumns) {
+        for (item in items) card(item, Modifier.fillMaxWidth())
+        return
+    }
+    for (row in items.chunked(2)) {
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for (item in row) card(item, Modifier.weight(1f).fillMaxHeight())
+            if (row.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
 @Composable
 fun DraftEventScreen(draft: DraftState, onChange: ((ClaimForm) -> ClaimForm) -> Unit) {
     val form = draft.form
     val errors = draft.errors
+    // От 481 px форма в две колонки (ТЗ 5.2): место рядом с телефоном, ФИО рядом с телефоном участника.
+    val twoColumns = LocalWindowWidth.current.atLeastMedium
+    val fields = draft.selectedType?.fields.orEmpty()
+    val phoneField = fields.find { it.code == ClaimField.CONTACT_PHONE.apiName }
     ScreenBody(spacing = 10.dp) {
         PageTitle("Расскажите о событии")
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -97,25 +131,22 @@ fun DraftEventScreen(draft: DraftState, onChange: ((ClaimForm) -> ClaimForm) -> 
             )
         }
         // Поля и порядок — из правил типа события (GET /event-types).
-        for (field in draft.selectedType?.fields.orEmpty()) {
+        for (field in fields) {
             when {
-                field.code == ParticipantsField -> ParticipantsBlock(form, errors, onChange)
+                // В две колонки телефон уже стоит рядом с местом события.
+                twoColumns && field == phoneField && fields.any { it.code == ClaimField.EVENT_LOCATION.apiName } ->
+                    Unit
+                twoColumns && field.code == ClaimField.EVENT_LOCATION.apiName && phoneField != null ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextFormField(field, form, errors, onChange, Modifier.weight(1f))
+                        TextFormField(phoneField, form, errors, onChange, Modifier.weight(1f))
+                    }
+                field.code == ParticipantsField -> ParticipantsBlock(form, errors, onChange, twoColumns)
                 field.valueType == FieldValueType.BOOLEAN ->
                     InsuranceCheckbox(field.title, form.flags[field.code] == true) { checked ->
                         onChange { it.copy(flags = it.flags + (field.code to checked)) }
                     }
-                field.valueType == FieldValueType.STRING ->
-                    InsuranceField(
-                        if (field.required) field.title else "${field.title} (необязательно)",
-                        form.text[field.code].orEmpty(),
-                        { value -> onChange { it.copy(text = it.text + (field.code to value)) } },
-                        multiline = field.code != ClaimField.CONTACT_PHONE.apiName &&
-                            field.code != ClaimField.EVENT_LOCATION.apiName,
-                        keyboard =
-                            if (field.code == ClaimField.CONTACT_PHONE.apiName) KeyboardType.Phone
-                            else KeyboardType.Text,
-                        error = errors[field.code],
-                    )
+                field.valueType == FieldValueType.STRING -> TextFormField(field, form, errors, onChange)
             }
         }
         draft.error?.let { Notice(it) }
@@ -128,22 +159,60 @@ private fun ParticipantsBlock(
     form: ClaimForm,
     errors: Map<String, String>,
     onChange: ((ClaimForm) -> ClaimForm) -> Unit,
+    twoColumns: Boolean,
 ) {
     InsuranceCard(spacing = 10.dp) {
         InfoRow(Res.drawable.team_small, "Участники", "Вы указаны водителем-заявителем")
-        InsuranceField(
-            "ФИО второго водителя",
-            form.otherDriver,
-            { value -> onChange { it.copy(otherDriver = value) } },
-            error = errors["otherDriver"],
-        )
-        InsuranceField(
-            "Телефон второго водителя (необязательно)",
-            form.otherPhone,
-            { value -> onChange { it.copy(otherPhone = value) } },
-            keyboard = KeyboardType.Phone,
-        )
+        @Composable
+        fun name(modifier: Modifier) =
+            InsuranceField(
+                "ФИО второго водителя",
+                form.otherDriver,
+                { value -> onChange { it.copy(otherDriver = value) } },
+                modifier,
+                error = errors["otherDriver"],
+            )
+        @Composable
+        fun phone(modifier: Modifier) =
+            InsuranceField(
+                "Телефон второго водителя (необязательно)",
+                form.otherPhone,
+                { value -> onChange { it.copy(otherPhone = value) } },
+                modifier,
+                keyboard = KeyboardType.Phone,
+            )
+        if (twoColumns)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                name(Modifier.weight(1f))
+                phone(Modifier.weight(1f))
+            }
+        else {
+            name(Modifier)
+            phone(Modifier)
+        }
     }
+}
+
+/** Строковое поле формы по правилу типа события: подпись, клавиатура, многострочность. */
+@Composable
+private fun TextFormField(
+    field: FormFieldDto,
+    form: ClaimForm,
+    errors: Map<String, String>,
+    onChange: ((ClaimForm) -> ClaimForm) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    InsuranceField(
+        if (field.required) field.title else "${field.title} (необязательно)",
+        form.text[field.code].orEmpty(),
+        { value -> onChange { it.copy(text = it.text + (field.code to value)) } },
+        modifier,
+        multiline = field.code != ClaimField.CONTACT_PHONE.apiName &&
+            field.code != ClaimField.EVENT_LOCATION.apiName,
+        keyboard =
+            if (field.code == ClaimField.CONTACT_PHONE.apiName) KeyboardType.Phone else KeyboardType.Text,
+        error = errors[field.code],
+    )
 }
 
 @Composable

@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import tinsurance.shared.generated.resources.*
@@ -163,6 +165,8 @@ fun TextLink(
 ) {
     Row(
         Modifier.fillMaxWidth()
+            // ТЗ 4.2.1: область нажатия не меньше 44 px, даже если текст ссылки в одну строку.
+            .heightIn(min = MinTouchTarget)
             .clip(RoundedCornerShape(4.dp))
             .clickable(role = Role.Button, onClick = onClick),
         horizontalArrangement = if (centered) Arrangement.Center else Arrangement.spacedBy(8.dp),
@@ -241,16 +245,22 @@ fun SegmentedTabs(titles: List<String>, selected: Int, onSelect: (Int) -> Unit) 
         titles.forEachIndexed { index, title ->
             Box(
                 Modifier.weight(1f)
-                    .heightIn(min = 28.dp)
+                    .heightIn(min = MinTouchTarget)
                     .clip(RoundedCornerShape(7.dp))
                     .background(if (selected == index) Color.White else Color.Transparent)
                     .selectable(selected == index, role = Role.Tab, onClick = { onSelect(index) })
                     .padding(horizontal = 4.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Caption(
+                // На 320 px «Завершённые» не помещается в треть ширины: вместо переноса посреди
+                // слова шрифт уменьшается, но не меньше 10 sp.
+                val style = MaterialTheme.typography.bodySmall
+                Text(
                     title,
+                    style = style,
                     color = if (selected == index) InsuranceColors.Ink else InsuranceColors.Muted,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize),
                 )
             }
         }
@@ -325,7 +335,7 @@ fun InsuranceCheckbox(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .heightIn(min = 32.dp)
+            .heightIn(min = MinTouchTarget)
             .toggleable(checked, role = Role.Checkbox, onValueChange = onChange),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
