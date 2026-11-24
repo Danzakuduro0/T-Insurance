@@ -17,7 +17,11 @@ import com.tinsurance.app.operator.OperatorBackground
 import com.tinsurance.app.ui.*
 
 @Composable
-fun AdminApp(initialScreen: AdminScreen = AdminScreen.Overview, onClient: () -> Unit = {}, onDemo: () -> Unit = {}) {
+fun AdminApp(
+    initialScreen: AdminScreen = AdminScreen.Overview,
+    onClient: () -> Unit = {},
+    onDemo: (() -> Unit)? = null,
+) {
     val state = remember { AdminState() }
     var screenName by rememberSaveable { mutableStateOf(initialScreen.name) }
     var selected by rememberSaveable { mutableStateOf(state.unassigned.map { it.number }) }
@@ -82,7 +86,7 @@ fun AdminApp(initialScreen: AdminScreen = AdminScreen.Overview, onClient: () -> 
                         "profile" -> {
                             Label(AdminName)
                             Caption("Администратор")
-                            TextLink("Выбор роли", onDemo)
+                            if (onDemo != null) TextLink("Выбор роли", onDemo)
                             TextLink("К клиентскому приложению", onClient)
                         }
                         "notifications" -> {

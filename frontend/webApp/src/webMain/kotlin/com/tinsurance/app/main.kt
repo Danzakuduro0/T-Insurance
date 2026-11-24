@@ -1,30 +1,28 @@
 package com.tinsurance.app
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
-import com.tinsurance.app.client.ClientScreen
-import com.tinsurance.app.operator.OperatorScreen
-import com.tinsurance.app.admin.AdminScreen
+import web.events.addHandler
 import web.location.location
+import web.window.hashChangeEvent
+import web.window.window
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    // Direct links are useful when comparing each screen with Figma.
-    val clientScreen =
-        ClientScreen.entries.firstOrNull {
-            it.name.equals(location.hash.removePrefix("#"), ignoreCase = true)
-        }
-    val operatorScreen = OperatorScreen.entries.firstOrNull {
-        "Operator${it.name}".equals(location.hash.removePrefix("#"), ignoreCase = true)
-    }
-    val adminScreen = AdminScreen.entries.firstOrNull {
-        "Admin${it.name}".equals(location.hash.removePrefix("#"), ignoreCase = true)
-    }
     ComposeViewport {
-        // Рамка телефона 390×844 — только по прямой ссылке на экран (сравнение с макетом);
-        // обычный запуск подстраивается под ширину окна.
-        App(showStatusBar = clientScreen != null, initialScreen = clientScreen ?: ClientScreen.Claims,
-            initialOperatorScreen = operatorScreen,
-            initialAdminScreen = adminScreen, showDemo = location.hash.equals("#Demo", ignoreCase = true))
+        var fragment by remember { mutableStateOf(location.hash.removePrefix("#")) }
+        DisposableEffect(Unit) {
+            val unsubscribe = window.hashChangeEvent.addHandler { fragment = location.hash.removePrefix("#") }
+            onDispose { unsubscribe() }
+        }
+        key(fragment) {
+            WebApp(fragment, navigate = { location.hash = it })
+        }
     }
 }
