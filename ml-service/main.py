@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 import time
 import cv2
@@ -10,6 +10,8 @@ app = FastAPI(title="T-Insurance ML Service")
 
 # --- Модели (без изменений) ---
 class AnalyzeRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     document_id: str
     claim_id: str
     storage_key: str
@@ -32,6 +34,8 @@ class DamageResult(BaseModel):
     top_classes: List[DamageClass]
 
 class AnalyzeResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     document_id: str
     quality: QualityResult
     damage: Optional[DamageResult] = None
@@ -123,3 +127,7 @@ def analyze_image(request: AnalyzeRequest):
         model_version="v1.0.0",
         processing_ms=processing_ms
     )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
